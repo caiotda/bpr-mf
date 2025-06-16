@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+#env
+.bpr-mf/
+
 # Distribution / packaging
 .Python
 build/

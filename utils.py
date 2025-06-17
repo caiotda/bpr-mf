@@ -1,5 +1,6 @@
 from collections import defaultdict
 import numpy as np
+import pandas as pd
 
 def generate_bpr_dataset(interactions_dataset, num_negatives=3):
     user2items = defaultdict(set)

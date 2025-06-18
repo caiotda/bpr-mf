@@ -54,6 +54,8 @@ def bpr_loss_with_reg(
         negative_item_factor.norm(2).pow(2)
     ) / batch_size
 
+    return loss + reg
+
 
 def bpr_train(dataloader, model, bpr_loss, optimizer, reg_lambda = 1e-4, n_epochs=10):
     batch_losses = [] 

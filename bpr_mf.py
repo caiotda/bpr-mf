@@ -18,6 +18,25 @@ class bprMFDataloader(Dataset):
     def __getitem__(self, idx):
         return self.users[idx], self.pos_items[idx], self.neg_items[idx]
 
+class bprMFLClickDebiasingDataloader(Dataset):
+    def __init__(self, bpr_df):
+        self.users = torch.tensor(bpr_df["user"].values, dtype=torch.long)
+        self.pos_items = torch.tensor(bpr_df["pos_item"].values, dtype=torch.long)
+        self.neg_items = torch.tensor(bpr_df["neg_item"].values, dtype=torch.long)
+        self.click_position = torch.tensor(bpr_df["click_position"].values, dtype=torch.long)
+
+    def __len__(self):
+        return len(self.users)
+
+    def __getitem__(self, idx):
+        return (
+            self.users[idx],
+            self.pos_items[idx],
+            self.neg_items[idx],
+            self.click_position[idx]
+        )
+
+
 
 class bprMF(nn.Module):
     def __init__(self, num_users, num_items, factors):
@@ -36,6 +55,32 @@ class bprMF(nn.Module):
         # We avoid applying sigmoid here as the BPR paper assumes that 
         # the predicted score is a simple dot product
         return dot
+    
+def get_click_propensity(clicks_positions):
+    # Function that penalizes clicks on top ranked positions. This
+    # serves as a debiasing approach for our model.
+    return torch.log2(1 + clicks_positions)
+
+def bpr_loss_with_reg_with_debiased_click(
+            positive_item_scores,
+            negative_item_scores,
+            positive_items_positions,
+            user_factor,
+            positive_item_factor,
+            negative_item_factor,
+            reg_lambda=1e-4):
+    w_u_i = get_click_propensity(positive_items_positions)
+    loss = - w_u_i * torch.log(torch.sigmoid(positive_item_scores - negative_item_scores) + 1e-8)
+    loss = loss.mean()
+    batch_size = positive_item_scores.size(0)
+    # Applies l2 regularization as per BPR-OPT.
+    reg = reg_lambda * (
+        user_factor.norm(2).pow(2) +
+        positive_item_factor.norm(2).pow(2) +
+        negative_item_factor.norm(2).pow(2)
+    ) / batch_size
+
+    return loss + reg
 
 
 def bpr_loss_with_reg(
@@ -55,6 +100,54 @@ def bpr_loss_with_reg(
     ) / batch_size
 
     return loss + reg
+
+
+
+
+def bpr_train_with_debiasing(dataloader, model, bpr_loss, optimizer, reg_lambda = 1e-4, n_epochs=10):
+    batch_losses = [] 
+    epoch_losses = []
+    model.train()
+    for epoch in range(n_epochs):
+
+        epoch_loss = []
+        for batch, ((user_ids, positive_items_ids, negative_items_ids, clicked_positions)) in enumerate(dataloader):
+            user_ids = user_ids.to(device)
+
+            positive_items_ids = positive_items_ids.to(device)
+            negative_items_ids = negative_items_ids.to(device)
+            clicked_positions = clicked_positions.to(device)
+
+            pred_positive = model(user_ids, positive_items_ids)
+            pred_negative = model(user_ids, negative_items_ids)
+
+
+            users_factors = model.user_emb(user_ids)
+            positive_items_factors = model.item_emb(positive_items_ids)
+            negative_items_factors = model.item_emb(negative_items_ids)
+
+
+
+            loss = bpr_loss(
+                pred_positive,
+                pred_negative,
+                clicked_positions,
+                users_factors,
+                positive_items_factors,
+                negative_items_factors,
+                reg_lambda
+            )
+
+            epoch_loss.append(loss.detach().item())
+            batch_losses.append(loss.detach().item())
+
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+        epoch_loss = sum(epoch_loss) / len(epoch_loss)
+        epoch_losses.append(epoch_loss)
+        print(f"epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{n_epochs}")
+    return batch_losses, epoch_losses
 
 
 def bpr_train(dataloader, model, bpr_loss, optimizer, reg_lambda = 1e-4, n_epochs=10):

@@ -8,6 +8,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class bprMFDataloader(Dataset):
     def __init__(self, bpr_df):
+        self.data = bpr_df
         self.users = torch.tensor(bpr_df["user"].values, dtype=torch.long)
         self.pos_items = torch.tensor(bpr_df["pos_item"].values, dtype=torch.long)
         self.neg_items = torch.tensor(bpr_df["neg_item"].values, dtype=torch.long)
@@ -20,6 +21,7 @@ class bprMFDataloader(Dataset):
 
 class bprMFLClickDebiasingDataloader(Dataset):
     def __init__(self, bpr_df):
+        self.data = bpr_df
         self.users = torch.tensor(bpr_df["user"].values, dtype=torch.long)
         self.pos_items = torch.tensor(bpr_df["pos_item"].values, dtype=torch.long)
         self.neg_items = torch.tensor(bpr_df["neg_item"].values, dtype=torch.long)
@@ -104,14 +106,15 @@ def bpr_loss_with_reg(
 
 
 
-def bpr_train_with_debiasing(dataloader, model, bpr_loss, optimizer, reg_lambda = 1e-4, n_epochs=10):
+def bpr_train_with_debiasing(train_data_loader, test_data_loader, model, bpr_loss, optimizer, reg_lambda = 1e-4, n_epochs=10, debug=False):
     batch_losses = [] 
-    epoch_losses = []
+    train_epoch_losses = []
+    test_epoch_losses = []
     model.train()
     for epoch in range(n_epochs):
 
         epoch_loss = []
-        for batch, ((user_ids, positive_items_ids, negative_items_ids, clicked_positions)) in enumerate(dataloader):
+        for batch, ((user_ids, positive_items_ids, negative_items_ids, clicked_positions)) in enumerate(train_data_loader):
             user_ids = user_ids.to(device)
 
             positive_items_ids = positive_items_ids.to(device)
@@ -144,20 +147,78 @@ def bpr_train_with_debiasing(dataloader, model, bpr_loss, optimizer, reg_lambda 
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
-        epoch_loss = sum(epoch_loss) / len(epoch_loss)
-        epoch_losses.append(epoch_loss)
-        print(f"epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{n_epochs}")
-    return batch_losses, epoch_losses
+        train_epoch_loss = sum(epoch_loss) / len(epoch_loss)
+        train_epoch_losses.append(train_epoch_loss)
+        test_epoch_loss = bpr_eval_debiasing(test_data_loader, model, bpr_loss, reg_lambda)
+        test_epoch_losses.append(test_epoch_loss)
+        if debug:
+            print(f"Train epoch mean loss: {train_epoch_loss:>7f};\n Test epoch mean loss: {test_epoch_loss:>7f}; Epoch: {epoch+1}/{n_epochs}")
+    return train_epoch_losses, test_epoch_losses
+        
+def bpr_eval_debiasing(dataloader, model, bpr_loss, reg_lambda=1e-4):
+    model.eval()
+    test_losses = []
+    with torch.no_grad():
+        for batch in dataloader:
+            user_ids, pos_item_ids, neg_item_ids, clicked_positions = batch
+            user_ids = user_ids.to(device)
+            users_factors = model.user_emb(user_ids)
+            pos_item_ids = pos_item_ids.to(device)
+            neg_item_ids = neg_item_ids.to(device)
+            clicked_positions = clicked_positions.to(device)
+
+            pred_positive = model(user_ids, pos_item_ids)
+            pred_negative = model(user_ids, neg_item_ids)
+
+            positive_items_factors = model.item_emb(pos_item_ids)
+            negative_items_factors = model.item_emb(neg_item_ids)
+            loss = bpr_loss(
+                pred_positive,
+                pred_negative,
+                clicked_positions,
+                users_factors,
+                positive_items_factors,
+                negative_items_factors,
+                reg_lambda
+            )
+            test_losses.append(loss.item())
+    avg_test_loss = sum(test_losses) / len(test_losses)
+    model.train()
+    return avg_test_loss
 
 
-def bpr_train(dataloader, model, bpr_loss, optimizer, reg_lambda = 1e-4, n_epochs=10):
+def bpr_eval(dataloader, model, bpr_loss, reg_lambda=1e-4):
+    model.eval()
+    test_losses = []
+    with torch.no_grad():
+        for batch in dataloader:
+            user_ids, pos_item_ids, neg_item_ids = batch
+            user_ids = user_ids.to(device)
+            users_factors = model.user_emb(user_ids)
+            pos_item_ids = pos_item_ids.to(device)
+            neg_item_ids = neg_item_ids.to(device)
+
+            pred_positive = model(user_ids, pos_item_ids)
+            pred_negative = model(user_ids, neg_item_ids)
+
+            positive_items_factors = model.item_emb(pos_item_ids)
+            negative_items_factors = model.item_emb(neg_item_ids)
+            loss = bpr_loss(pred_positive, pred_negative, users_factors, positive_items_factors, negative_items_factors, reg_lambda=reg_lambda)
+            test_losses.append(loss.item())
+    avg_test_loss = sum(test_losses) / len(test_losses)
+    model.train()
+    return avg_test_loss
+
+
+def bpr_train(train_data_loader, test_data_loader, model, bpr_loss, optimizer, reg_lambda = 1e-4, n_epochs=10, debug=False):
     batch_losses = [] 
-    epoch_losses = []
+    train_epoch_losses = []
+    test_epoch_losses = []
     model.train()
     for epoch in range(n_epochs):
 
         epoch_loss = []
-        for batch, ((user_ids, positive_items_ids, negative_items_ids)) in enumerate(dataloader):
+        for batch, ((user_ids, positive_items_ids, negative_items_ids)) in enumerate(train_data_loader):
             user_ids = user_ids.to(device)
 
             positive_items_ids = positive_items_ids.to(device)
@@ -188,7 +249,10 @@ def bpr_train(dataloader, model, bpr_loss, optimizer, reg_lambda = 1e-4, n_epoch
             optimizer.step()
             optimizer.zero_grad()
         epoch_loss = sum(epoch_loss) / len(epoch_loss)
-        epoch_losses.append(epoch_loss)
-        print(f"epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{n_epochs}")
-    return batch_losses, epoch_losses
+        train_epoch_losses.append(epoch_loss)
+        test_epoch_loss = bpr_eval(test_data_loader, model, bpr_loss, reg_lambda)
+        test_epoch_losses.append(test_epoch_loss)
+        if debug:
+            print(f"Train epoch mean loss: {epoch_loss:>7f};\n Test epoch mean loss: {test_epoch_loss:>7f}; Epoch: {epoch+1}/{n_epochs}")
+    return train_epoch_losses, test_epoch_losses
         

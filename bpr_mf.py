@@ -62,6 +62,19 @@ class bprMF(nn.Module):
         # the predicted score is a simple dot product
         return dot
     
+    def predict(self, user, candidates, k=100):
+        # Generates a recommendation list given a candidate torch tensor
+
+        assert torch.all(user >= 0) and torch.all(user < self.user_emb.num_embeddings), "User index out of range"
+        assert torch.all(candidates >= 0) and torch.all(candidates < self.item_emb.num_embeddings), "Candidate item indices out of range"
+        items_list = candidates
+        output = self.forward(torch.tensor(user, device=device), items_list)
+        scored_items = list(zip(candidates.tolist(), output.tolist()))
+        # Rank by score, descending
+        results_ranked_by_model = sorted(scored_items, key=lambda l: l[1], reverse=True)[:k]
+        items, scores = zip(*results_ranked_by_model)
+        return list(items), list(scores)
+    
 def get_click_propensity(clicks_positions):
     # Function that penalizes clicks on top ranked positions. This
     # serves as a debiasing approach for our model.

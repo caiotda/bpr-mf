@@ -51,6 +51,10 @@ class bprMF(nn.Module):
         nn.init.normal_(self.user_emb.weight, mean=0, std=0.01)
         nn.init.normal_(self.item_emb.weight, mean=0, std=0.01)
     def forward(self, user, item):
+
+        assert torch.all(user >= 0) and torch.all(user < self.user_emb.num_embeddings), "User index out of range"
+        assert torch.all(item >= 0) and torch.all(item < self.item_emb.num_embeddings), "Item index out of range"
+        
         user_emb = self.user_emb(user)
         item_emb = self.item_emb(item)
         dot =  (user_emb * item_emb).sum(dim=1)

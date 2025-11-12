@@ -74,20 +74,16 @@ class bprMFBase(nn.Module):
 
  
 class bprMf(bprMFBase):
-    def __init__(self, num_users, num_items, factors, loss, optimizer, reg_lambda, n_epochs, test_data_loader, val_data_loader):
+    def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs):
         super().__init__()
         self.user_emb = nn.Embedding(num_embeddings=num_users, embedding_dim=factors)
         self.item_emb = nn.Embedding(num_embeddings=num_items, embedding_dim=factors)
         nn.init.normal_(self.user_emb.weight, mean=0, std=0.01)
         nn.init.normal_(self.item_emb.weight, mean=0, std=0.01)
-        self.loss = loss
-        self.test_data_loader = test_data_loader
-        self.val_data_loader = val_data_loader
-        self.optimizer = optimizer
         self.reg_lambda = reg_lambda
         self.n_epochs = n_epochs
 
-    def fit(self, train_data_loader, debug=False):
+    def fit(self, train_data_loader, optimizer, debug=False):
         train_epoch_losses = []
         self.train()
         for epoch in range(self.n_epochs):
@@ -116,19 +112,19 @@ class bprMf(bprMFBase):
                 batch_losses.append(loss.detach().item())
 
                 loss.backward()
-                self.optimizer.step()
-                self.optimizer.zero_grad()
-            epoch_loss = np.mean(batch_losses) if batch_losses else 0.0
+                optimizer.step()
+                optimizer.zero_grad()
+            epoch_loss = float(np.mean(batch_losses)) if batch_losses else 0.0
             train_epoch_losses.append(epoch_loss)
             if debug:
                 print(f"Train epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{self.n_epochs}")
         return train_epoch_losses
 
-    def evaluate(self, reg_lambda=1e-4):
+    def evaluate(self, test_data_loader):
         self.eval()
         test_losses = []
         with torch.no_grad():
-            for batch in self.test_data_loader:
+            for batch in test_data_loader:
                 user_ids, pos_item_ids, neg_item_ids = batch
                 user_ids = user_ids.to(device)
                 users_factors = self.user_emb(user_ids)
@@ -140,30 +136,32 @@ class bprMf(bprMFBase):
 
                 positive_items_factors = self.item_emb(pos_item_ids)
                 negative_items_factors = self.item_emb(neg_item_ids)
-                loss = self.loss(pred_positive, pred_negative, users_factors, positive_items_factors, negative_items_factors, reg_lambda=reg_lambda)
+                loss = bpr_loss_with_reg(
+                    pred_positive,
+                    pred_negative,
+                    users_factors,
+                    positive_items_factors,
+                    negative_items_factors,
+                    reg_lambda=self.reg_lambda
+                )
                 test_losses.append(loss.item())
-        avg_test_loss = sum(test_losses) / len(test_losses)
         self.train()
-        return avg_test_loss
+        return float(np.mean(test_losses))
 
 
 
 
-class bprMFWithClickDebiasing(bprMf):
-    def __init__(self, num_users, num_items, factors, loss, optimizer, reg_lambda, n_epochs, test_data_loader, val_data_loader):
+class bprMFWithClickDebiasing(bprMFBase):
+    def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs):
         super().__init__()
         self.user_emb = nn.Embedding(num_embeddings=num_users, embedding_dim=factors)
         self.item_emb = nn.Embedding(num_embeddings=num_items, embedding_dim=factors)
         nn.init.normal_(self.user_emb.weight, mean=0, std=0.01)
         nn.init.normal_(self.item_emb.weight, mean=0, std=0.01)
-        self.loss = loss
-        self.test_data_loader = test_data_loader
-        self.val_data_loader = val_data_loader
-        self.optimizer = optimizer
         self.reg_lambda = reg_lambda
         self.n_epochs = n_epochs
 
-    def fit(self, train_data_loader, debug=False):
+    def fit(self, train_data_loader, optimizer, debug=False):
         train_epoch_losses = []
         self.train()
         for epoch in range(self.n_epochs):
@@ -182,7 +180,7 @@ class bprMFWithClickDebiasing(bprMf):
                 positive_items_factors = self.item_emb(positive_items_ids)
                 negative_items_factors = self.item_emb(negative_items_ids)
 
-                loss = self.loss(
+                loss = bpr_loss_with_reg_with_debiased_click(
                     pred_positive,
                     pred_negative,
                     clicked_positions,
@@ -195,19 +193,19 @@ class bprMFWithClickDebiasing(bprMf):
                 batch_losses.append(loss.detach().item())
 
                 loss.backward()
-                self.optimizer.step()
-                self.optimizer.zero_grad()
+                optimizer.step()
+                optimizer.zero_grad()
             epoch_loss = np.mean(batch_losses) if batch_losses else 0.0
             train_epoch_losses.append(epoch_loss)
             if debug:
                 print(f"Train epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{self.n_epochs}")
         return train_epoch_losses
     
-    def bpr_eval_debiasing(self):
+    def evaluate(self, test_data_loader):
         self.eval()
         test_losses = []
         with torch.no_grad():
-            for batch in self.test_data_loader:
+            for batch in test_data_loader:
                 user_ids, pos_item_ids, neg_item_ids, clicked_positions = batch
                 user_ids = user_ids.to(device)
                 users_factors =self.user_emb(user_ids)
@@ -220,7 +218,7 @@ class bprMFWithClickDebiasing(bprMf):
 
                 positive_items_factors =self.item_emb(pos_item_ids)
                 negative_items_factors =self.item_emb(neg_item_ids)
-                loss = self.loss(
+                loss = bpr_loss_with_reg_with_debiased_click(
                     pred_positive,
                     pred_negative,
                     clicked_positions,

@@ -62,9 +62,6 @@ class bprMFBase(nn.Module, abc.ABC):
 
         user_emb = self.user_emb(user)
         item_emb = self.item_emb(item)
-        # Ensure shapes are compatible
-        if user_emb.shape != item_emb.shape:
-            raise ValueError(f"Shape mismatch: user_emb {user_emb.shape}, item_emb {item_emb.shape}")
         dot = (user_emb * item_emb).sum(dim=1)
         return dot
 

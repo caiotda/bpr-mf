@@ -1,5 +1,6 @@
 import torch
 import pandas as pd
+import numpy as np
 
 class Evaluate():
     def __init__(self, model, test_set_loader, interaction_data, k=20):

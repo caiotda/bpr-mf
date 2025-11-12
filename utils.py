@@ -40,8 +40,11 @@ def generate_bpr_dataset_with_click_data(interactions_dataset, num_negatives=3):
     for u, i in zip(interactions_dataset["user"], interactions_dataset["item"]):
         user2items[u].add(i)
 
-    positives = interactions_dataset[["user", "item", "click"]].to_numpy()
-    users_pos, items_pos, click_pos = positives[:, 0], positives[:, 1], positives[:, 2]
+    feedback_df = interactions_dataset[["user", "item", "click"]]
+    positives = feedback_df[~feedback_df["click"].isna()].to_numpy()
+    users_pos = positives[:, 0].astype(int)
+    items_pos = positives[:, 1].astype(int)
+    click_pos = positives[:, 2].astype(int)
 
     tuples = []
     # Assuming taht the items are zero-indexed and continuous.

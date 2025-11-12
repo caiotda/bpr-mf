@@ -42,10 +42,15 @@ class bprMFLClickDebiasingDataloader(Dataset):
             self.click_position[idx]
         )
 
-
 class bprMFBase(nn.Module, abc.ABC):
-    def __init__(self):
+    def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs):
         super().__init__()
+        self.user_emb = nn.Embedding(num_embeddings=num_users, embedding_dim=factors)
+        self.item_emb = nn.Embedding(num_embeddings=num_items, embedding_dim=factors)
+        nn.init.normal_(self.user_emb.weight, mean=0, std=0.01)
+        nn.init.normal_(self.item_emb.weight, mean=0, std=0.01)
+        self.reg_lambda = reg_lambda
+        self.n_epochs = n_epochs
 
     @abc.abstractmethod
     def fit(self, train_data_loader, debug=False):
@@ -80,13 +85,7 @@ class bprMFBase(nn.Module, abc.ABC):
  
 class bprMf(bprMFBase):
     def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs):
-        super().__init__()
-        self.user_emb = nn.Embedding(num_embeddings=num_users, embedding_dim=factors)
-        self.item_emb = nn.Embedding(num_embeddings=num_items, embedding_dim=factors)
-        nn.init.normal_(self.user_emb.weight, mean=0, std=0.01)
-        nn.init.normal_(self.item_emb.weight, mean=0, std=0.01)
-        self.reg_lambda = reg_lambda
-        self.n_epochs = n_epochs
+        super().__init__(num_users, num_items, factors, reg_lambda, n_epochs)
 
     def fit(self, train_data_loader, optimizer, debug=False):
         train_epoch_losses = []
@@ -158,13 +157,7 @@ class bprMf(bprMFBase):
 
 class bprMFWithClickDebiasing(bprMFBase):
     def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs):
-        super().__init__()
-        self.user_emb = nn.Embedding(num_embeddings=num_users, embedding_dim=factors)
-        self.item_emb = nn.Embedding(num_embeddings=num_items, embedding_dim=factors)
-        nn.init.normal_(self.user_emb.weight, mean=0, std=0.01)
-        nn.init.normal_(self.item_emb.weight, mean=0, std=0.01)
-        self.reg_lambda = reg_lambda
-        self.n_epochs = n_epochs
+        super().__init__(num_users, num_items, factors, reg_lambda, n_epochs)
 
     def fit(self, train_data_loader, optimizer, debug=False):
         train_epoch_losses = []

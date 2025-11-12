@@ -46,7 +46,7 @@ class bprMFBase(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def fit(self, train_data_loader, debug=False):
+    def fit(self, train_data_loader, optimizer, debug=False):
         pass
 
     def forward(self, user, item):
@@ -195,7 +195,7 @@ class bprMFWithClickDebiasing(bprMFBase):
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
-            epoch_loss = np.mean(batch_losses) if batch_losses else 0.0
+            epoch_loss = float(np.mean(batch_losses)) if batch_losses else 0.0
             train_epoch_losses.append(epoch_loss)
             if debug:
                 print(f"Train epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{self.n_epochs}")
@@ -208,16 +208,16 @@ class bprMFWithClickDebiasing(bprMFBase):
             for batch in test_data_loader:
                 user_ids, pos_item_ids, neg_item_ids, clicked_positions = batch
                 user_ids = user_ids.to(device)
-                users_factors =self.user_emb(user_ids)
+                users_factors = self.user_emb(user_ids)
                 pos_item_ids = pos_item_ids.to(device)
                 neg_item_ids = neg_item_ids.to(device)
                 clicked_positions = clicked_positions.to(device)
 
-                pred_positive =self(user_ids, pos_item_ids)
-                pred_negative =self(user_ids, neg_item_ids)
+                pred_positive = self(user_ids, pos_item_ids)
+                pred_negative = self(user_ids, neg_item_ids)
 
-                positive_items_factors =self.item_emb(pos_item_ids)
-                negative_items_factors =self.item_emb(neg_item_ids)
+                positive_items_factors = self.item_emb(pos_item_ids)
+                negative_items_factors = self.item_emb(neg_item_ids)
                 loss = bpr_loss_with_reg_with_debiased_click(
                     pred_positive,
                     pred_negative,
@@ -228,7 +228,7 @@ class bprMFWithClickDebiasing(bprMFBase):
                     self.reg_lambda
                 )
                 test_losses.append(loss.item())
-        avg_test_loss = sum(test_losses) / len(test_losses)
+        avg_test_loss = float(np.mean(test_losses))
         self.train()
         return avg_test_loss
 

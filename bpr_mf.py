@@ -1,4 +1,5 @@
 
+import abc
 import torch
 from torch import nn
 from torch.utils.data import Dataset
@@ -42,11 +43,12 @@ class bprMFLClickDebiasingDataloader(Dataset):
         )
 
 
-class bprMFBase(nn.Module):
+class bprMFBase(nn.Module, abc.ABC):
     def __init__(self):
         super().__init__()
 
-    def fit(self, train_data_loader, optimizer, debug=False):
+    @abc.abstractmethod
+    def fit(self, train_data_loader, debug=False):
         pass
 
     def forward(self, user, item):
@@ -55,6 +57,9 @@ class bprMFBase(nn.Module):
 
         user_emb = self.user_emb(user)
         item_emb = self.item_emb(item)
+        # Ensure shapes are compatible
+        if user_emb.shape != item_emb.shape:
+            raise ValueError(f"Shape mismatch: user_emb {user_emb.shape}, item_emb {item_emb.shape}")
         dot = (user_emb * item_emb).sum(dim=1)
         return dot
 

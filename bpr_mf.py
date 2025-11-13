@@ -67,13 +67,17 @@ class bprMFBase(nn.Module, abc.ABC):
         return mult
 
     def predict(self, user, candidates, k=100):
+        assert user.dim() == 1, "User tensor must be 1-dimensional"
+        assert candidates.dim() == 1, "Candidates tensor must be 1-dimensional"
         assert torch.all(user >= 0) and torch.all(user < self.user_emb.num_embeddings), "User index out of range"
         assert torch.all(candidates >= 0) and torch.all(candidates < self.item_emb.num_embeddings), "Candidate item indices out of range"
         items_list = candidates
         output = self.forward(user, items_list)
         # Sorts column-wise: each row contains the ranked recommendation
         scored_matrix, indices = output.sort(dim=1, descending=True)
-        return indices[:, :k], scored_matrix[:, :k]
+        # Map indices back to actual candidate item IDs
+        candidate_ids = candidates[indices[:, :k]]
+        return candidate_ids, scored_matrix[:, :k]
     
     def score(self, test_df, k=100, candidates=None):
         if candidates is None:
@@ -82,8 +86,8 @@ class bprMFBase(nn.Module, abc.ABC):
             items = candidates
         users = test_df["user"].drop_duplicates()
 
-        users_tensor = torch.tensor(users, device=device)
-        items_tensor = torch.tensor(items, device=device)
+        users_tensor = torch.tensor(users, dtype=torch.long, device=device)
+        items_tensor = torch.tensor(items, dtype=torch.long, device=device)
         item_recs = self.predict(users_tensor, items_tensor, k)[0]
 
         scored_df = test_df.copy()

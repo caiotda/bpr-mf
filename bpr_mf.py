@@ -5,7 +5,6 @@ from torch import nn
 from torch.utils.data import Dataset
 
 import numpy as np
-import pandas as pd
 
 from bpr_utils import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
 
@@ -91,8 +90,9 @@ class bprMFBase(nn.Module, abc.ABC):
         item_recs = self.predict(users_tensor, items_tensor, k)[0]
 
         scored_df = test_df.copy()
-        predictions_series = pd.Series(item_recs.cpu().tolist(), index=test_df.index)
-        scored_df[f"top_{k}_rec"] = predictions_series
+
+        user_to_pred = dict(zip(users.values, item_recs.cpu().tolist()))
+        scored_df[f"top_{k}_rec"] = scored_df["user"].map(user_to_pred)
         
         return scored_df
 

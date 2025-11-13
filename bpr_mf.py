@@ -62,8 +62,8 @@ class bprMFBase(nn.Module, abc.ABC):
 
         user_emb = self.user_emb(user)
         item_emb = self.item_emb(item)
-        dot = (user_emb * item_emb).sum(dim=1)
-        return dot
+        mult = user_emb @ item_emb.T
+        return mult
 
     def predict(self, user, candidates, k=100):
         assert torch.all(user >= 0) and torch.all(user < self.user_emb.num_embeddings), "User index out of range"

@@ -77,10 +77,10 @@ class bprMFBase(nn.Module, abc.ABC):
     
     def score(self, test_df, k=100, candidates=None):
         if candidates is None:
-            items = test_df[["item"]].drop_duplicates()
+            items = test_df["item"].drop_duplicates()
         else:
             items = candidates
-        users = test_df[["user"]].drop_duplicates()
+        users = test_df["user"].drop_duplicates()
 
         users_tensor = torch.tensor(users, device=device)
         items_tensor = torch.tensor(items, device=device)

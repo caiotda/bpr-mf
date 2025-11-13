@@ -5,6 +5,7 @@ from torch import nn
 from torch.utils.data import Dataset
 
 import numpy as np
+import pandas as pd
 
 from bpr_utils import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
 
@@ -70,10 +71,26 @@ class bprMFBase(nn.Module, abc.ABC):
         assert torch.all(candidates >= 0) and torch.all(candidates < self.item_emb.num_embeddings), "Candidate item indices out of range"
         items_list = candidates
         output = self.forward(user, items_list)
-        scored_items = list(zip(candidates.tolist(), output.tolist()))
-        results_ranked_by_model = sorted(scored_items, key=lambda l: l[1], reverse=True)[:k]
-        items, scores = zip(*results_ranked_by_model) if results_ranked_by_model else ([], [])
-        return list(items), list(scores)
+        # Sorts column-wise: each row contains the ranked recommendation
+        scored_matrix, indices = output.sort(dim=1, descending=True)
+        return indices[:, :k], scored_matrix[:, :k]
+    
+    def score(self, test_df, k=100, candidates=None):
+        if candidates is None:
+            items = test_df[["item"]].drop_duplicates()
+        else:
+            items = candidates
+        users = test_df[["user"]].drop_duplicates()
+
+        users_tensor = torch.tensor(users, device=device)
+        items_tensor = torch.tensor(items, device=device)
+        item_recs = self.predict(users_tensor, items_tensor, k)[0]
+
+        scored_df = test_df.copy()
+        predictions_series = pd.Series(item_recs.cpu().tolist(), index=test_df.index)
+        scored_df[f"top_{k}_rec"] = predictions_series
+        
+        return scored_df
 
     def predict_flat(self, user, candidates, k=100):
         prediction = self.predict(user, candidates, k)

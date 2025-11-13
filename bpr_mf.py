@@ -62,18 +62,39 @@ class bprMFBase(nn.Module, abc.ABC):
 
         user_emb = self.user_emb(user)
         item_emb = self.item_emb(item)
-        dot = (user_emb * item_emb).sum(dim=1)
-        return dot
+        mult = user_emb @ item_emb.T
+        return mult
 
     def predict(self, user, candidates, k=100):
+        assert user.dim() == 1, "User tensor must be 1-dimensional"
+        assert candidates.dim() == 1, "Candidates tensor must be 1-dimensional"
         assert torch.all(user >= 0) and torch.all(user < self.user_emb.num_embeddings), "User index out of range"
         assert torch.all(candidates >= 0) and torch.all(candidates < self.item_emb.num_embeddings), "Candidate item indices out of range"
         items_list = candidates
         output = self.forward(user, items_list)
-        scored_items = list(zip(candidates.tolist(), output.tolist()))
-        results_ranked_by_model = sorted(scored_items, key=lambda l: l[1], reverse=True)[:k]
-        items, scores = zip(*results_ranked_by_model) if results_ranked_by_model else ([], [])
-        return list(items), list(scores)
+        # Sorts column-wise: each row contains the ranked recommendation
+        scored_matrix, indices = output.sort(dim=1, descending=True)
+        # Map indices back to actual candidate item IDs
+        candidate_ids = candidates[indices[:, :k]]
+        return candidate_ids, scored_matrix[:, :k]
+    
+    def score(self, test_df, k=100, candidates=None):
+        if candidates is None:
+            items = test_df["item"].drop_duplicates()
+        else:
+            items = candidates
+        users = test_df["user"].drop_duplicates()
+
+        users_tensor = torch.tensor(users, dtype=torch.long, device=device)
+        items_tensor = torch.tensor(items, dtype=torch.long, device=device)
+        item_recs = self.predict(users_tensor, items_tensor, k)[0]
+
+        scored_df = test_df.copy()
+
+        user_to_pred = dict(zip(users.values, item_recs.cpu().tolist()))
+        scored_df[f"top_{k}_rec"] = scored_df["user"].map(user_to_pred)
+        
+        return scored_df
 
     def predict_flat(self, user, candidates, k=100):
         prediction = self.predict(user, candidates, k)

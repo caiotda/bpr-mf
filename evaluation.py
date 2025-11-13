@@ -25,18 +25,8 @@ class Evaluate():
             .groupby("user").agg({"item": list}) 
             .rename(columns={"item": "relevant_items"}) 
         ).reset_index()
-        candidate_items = evaluation_set.item.unique().astype(np.int64)
-        candidates = torch.tensor(candidate_items, dtype=torch.long, device=self.device)
-        self.candidates_for_evaluation = candidates
-        for k in [1, 5, 10, 20, 25]:
-            relevant_set[f"top_{k}_rec"] = relevant_set.apply(
-            lambda row: self.model.predict(
-                user=torch.tensor(data=row["user"], device=self.device),
-                candidates=self.candidates_for_evaluation,
-                k=k
-            )[0],
-            axis=1
-            )
+        candidate_items = evaluation_set["item"].unique().astype(np.int64)
+        relevant_set = self.model.score(test_df=relevant_set, candidates=candidate_items, k=self.k)
         return relevant_set.set_index("user")
     
     def precision(self, predicted, true):

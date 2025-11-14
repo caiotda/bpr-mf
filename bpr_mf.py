@@ -65,18 +65,46 @@ class bprMFBase(nn.Module, abc.ABC):
         mult = user_emb @ item_emb.T
         return mult
 
-    def predict(self, user, candidates, k=100):
-        assert user.dim() == 1, "User tensor must be 1-dimensional"
-        assert candidates.dim() == 1, "Candidates tensor must be 1-dimensional"
-        assert torch.all(user >= 0) and torch.all(user < self.user_emb.num_embeddings), "User index out of range"
-        assert torch.all(candidates >= 0) and torch.all(candidates < self.item_emb.num_embeddings), "Candidate item indices out of range"
+    def predict(self, user, candidates, mask=None, k=100):
+        """
+        Predict top-k recommended items for a batch of users.
+
+        Args:
+            user (Tensor): A batch of users being scored.
+            candidates (Tensor): A tensor of items to be scored.
+            mask (Tensor, optional): A tensor indicating item-user pairs to ignore 
+                (e.g., items already recommended to the users). Defaults to None.
+            k (int, optional): The number of top items to return. Defaults to 100.
+
+        Returns:
+            Tuple[Tensor, Tensor]: A tuple containing:
+                - candidate_ids (Tensor): The top-k recommended item IDs for each user.
+                - scored_matrix (Tensor): The scores of the top-k items for each user.
+        """
+        self.check_input_tensor_dimensions_for_prediction(user, candidates, mask)
         items_list = candidates
-        output = self.forward(user, items_list)
+        raw_prediction = self.forward(user, items_list)
+        if mask is not None:
+            output = torch.where(mask == 1, raw_prediction, float('-inf'))
+        else:
+            output = raw_prediction
         # Sorts column-wise: each row contains the ranked recommendation
         scored_matrix, indices = output.sort(dim=1, descending=True)
         # Map indices back to actual candidate item IDs
         candidate_ids = candidates[indices[:, :k]]
         return candidate_ids, scored_matrix[:, :k]
+
+    def check_input_tensor_dimensions_for_prediction(self, user, candidates, mask):
+        assert user.dim() == 1, "User tensor must be 1-dimensional"
+        if mask is not None:
+            assert mask.dim() == 2, "Mask tensor must be 2-dimensional"
+            assert mask.size(0) == user.size(0), "Mask's first dimension must match user tensor size"
+            assert mask.size(1) == candidates.size(0), "Mask's second dimension must match candidates tensor size"
+            assert torch.all((mask == -1) | (mask == 1)), "Mask values must be either -1 or 1"
+
+        assert candidates.dim() == 1, "Candidates tensor must be 1-dimensional"
+        assert torch.all(user >= 0) and torch.all(user < self.user_emb.num_embeddings), "User index out of range"
+        assert torch.all(candidates >= 0) and torch.all(candidates < self.item_emb.num_embeddings), "Candidate item indices out of range"
     
     def score(self, test_df, k=100, candidates=None):
         if candidates is None:

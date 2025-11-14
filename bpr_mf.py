@@ -84,8 +84,8 @@ class bprMFBase(nn.Module, abc.ABC):
         self.check_input_tensor_dimensions_for_prediction(user, candidates, mask)
         items_list = candidates
         raw_prediction = self.forward(user, items_list)
-        if (mask is not None):
-            output = torch.where(mask == -1, float('-inf'), raw_prediction)
+        if mask is not None:
+            output = torch.where(mask == 1, raw_prediction, float('-inf'))
         else:
             output = raw_prediction
         # Sorts column-wise: each row contains the ranked recommendation
@@ -98,8 +98,8 @@ class bprMFBase(nn.Module, abc.ABC):
         assert user.dim() == 1, "User tensor must be 1-dimensional"
         if mask is not None:
             assert mask.dim() == 2, "Mask tensor must be 2-dimensional"
-            assert mask.size(0) == user.size(0), "Mask's 0-th dimension must match user's 0-th dimension"
-            assert mask.size(1) == candidates.size(0), "Mask's 1-th dimension must match candidates' 0-th dimension"
+            assert mask.size(0) == user.size(0), "Mask's first dimension must match user tensor size"
+            assert mask.size(1) == candidates.size(0), "Mask's second dimension must match candidates tensor size"
             assert torch.all((mask == -1) | (mask == 1)), "Mask values must be either -1 or 1"
 
         assert candidates.dim() == 1, "Candidates tensor must be 1-dimensional"

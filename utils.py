@@ -2,6 +2,10 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
+from torch.utils.data import DataLoader, random_split
+import torch
+
+from bprMf.bpr_mf import bprMFLClickDebiasingDataloader
 def generate_bpr_dataset(interactions_dataset, num_negatives=3):
     user2items = defaultdict(set)
     for u, i in zip(interactions_dataset["user"], interactions_dataset["item"]):
@@ -34,6 +38,28 @@ def generate_bpr_dataset(interactions_dataset, num_negatives=3):
 
 
 
+def create_train_dataset(data, train_ratio=1.0):
+    bpr_dataset = generate_bpr_dataset_with_click_data(data, num_negatives=5)
+    data_bpr = bprMFLClickDebiasingDataloader(bpr_dataset)
+
+
+    train_len = int(train_ratio * len(data_bpr))
+    test_len = len(data_bpr) - train_len
+
+
+    train_data, _ = random_split(data_bpr, [train_len, test_len])
+
+
+
+    return DataLoader(train_data, batch_size=256, shuffle=True)
+
+
+def train(model, data):
+    train_data_loader = create_train_dataset(data)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    _ = model.fit(train_data_loader, optimizer)
+    return model
+    
 
 def generate_bpr_dataset_with_click_data(interactions_dataset, num_negatives=3):
     user2items = defaultdict(set)

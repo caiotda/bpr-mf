@@ -73,8 +73,8 @@ def generate_bpr_dataset_with_click_data(interactions_dataset, num_negatives=3):
     click_pos = positives[:, 2].astype(int)
 
     tuples = []
-    # Assuming taht the items are zero-indexed and continuous.
-    n_items = interactions_dataset["item"].max() + 1
+    # Assuming that the items are zero-indexed and continuous.
+    n_items = int(interactions_dataset["item"].max()) + 1
     all_items = np.arange(n_items)
 
     for u, i_pos, click_positions in zip(users_pos, items_pos, click_pos):

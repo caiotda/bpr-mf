@@ -6,7 +6,7 @@ from torch.utils.data import Dataset
 
 import numpy as np
 
-from bpr_utils import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
+from bprMf.bpr_utils import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

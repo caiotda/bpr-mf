@@ -2,10 +2,11 @@ from torch.utils.data import DataLoader, random_split
 import torch
 
 from bprMf.bpr_mf import bprMFDataloader, bprMFLClickDebiasingDataloader, bprMFWithClickDebiasing
+from bprMf.evaluation import Evaluate
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def generate_bpr_dataset(interactions_dataset, num_negatives=3, use_click_debiasing=False):
+def generate_bpr_triplets(interactions_dataset, num_negatives=3, use_click_debiasing=False):
     if use_click_debiasing:
         interactions_cols = ["user", "item", "click", "relevant"]
     else:
@@ -67,8 +68,8 @@ def generate_bpr_dataset(interactions_dataset, num_negatives=3, use_click_debias
 
     return triplets
 
-def create_train_dataset(data, train_ratio=1.0, should_debias=False):
-    bpr_dataset = generate_bpr_dataset(data, num_negatives=5, use_click_debiasing=should_debias)
+def create_bpr_dataloader(data, train_ratio=1.0, should_debias=False):
+    bpr_dataset = generate_bpr_triplets(data, num_negatives=5, use_click_debiasing=should_debias)
     
     if should_debias:
         data_bpr = bprMFLClickDebiasingDataloader(bpr_dataset)
@@ -87,12 +88,11 @@ def create_train_dataset(data, train_ratio=1.0, should_debias=False):
 
 def train(model, data, train_ratio=1.0):
     if isinstance(model, bprMFWithClickDebiasing):
-        train_data_loader = create_train_dataset(data, train_ratio, should_debias=True)
+        train_data_loader = create_bpr_dataloader(data, train_ratio, should_debias=True)
     else:
-        train_data_loader = create_train_dataset(data, train_ratio, should_debias=False)
+        train_data_loader = create_bpr_dataloader(data, train_ratio, should_debias=False)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     losses = model.fit(train_data_loader, optimizer)
 
     return model, losses
-    

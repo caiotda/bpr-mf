@@ -97,25 +97,11 @@ def create_train_dataset(data, train_ratio=1.0):
 
 
 def train(model, data, train_ratio=1.0):
-    start_time = time.time()
-    print("Starting training process...")
-
-    print("Creating training dataset...")
-    dataset_start = time.time()
     train_data_loader = create_train_dataset(data, train_ratio)
-    print(f"Training dataset created in {time.time() - dataset_start:.2f} seconds.")
-
-    print("Initializing optimizer...")
-    optimizer_start = time.time()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    print(f"Optimizer initialized in {time.time() - optimizer_start:.2f} seconds.")
 
-    print("Fitting model...")
-    fit_start = time.time()
     losses = model.fit(train_data_loader, optimizer)
-    print(f"Model fit completed in {time.time() - fit_start:.2f} seconds.")
 
-    print(f"Total training process completed in {time.time() - start_time:.2f} seconds.")
     return model, losses
     
 

@@ -2,7 +2,6 @@ from torch.utils.data import DataLoader, random_split
 import torch
 
 from bprMf.bpr_mf import bprMFDataloader, bprMFLClickDebiasingDataloader, bprMFWithClickDebiasing
-from bprMf.evaluation import Evaluate
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

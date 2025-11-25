@@ -1,20 +1,20 @@
-from collections import defaultdict
-import numpy as np
-import pandas as pd
-
 from torch.utils.data import DataLoader, random_split
 import torch
 
-from bprMf.bpr_mf import bprMFDataloader
+from bprMf.bpr_mf import bprMFDataloader, bprMFLClickDebiasingDataloader, bprMFWithClickDebiasing
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def generate_bpr_dataset(interactions_dataset, num_negatives=3):
+def generate_bpr_dataset(interactions_dataset, num_negatives=3, use_click_debiasing=False):
+    if use_click_debiasing:
+        interactions_cols = ["user", "item", "click", "relevant"]
+    else:
+        interactions_cols = ["user", "item", "relevant"]
 
     n_users = interactions_dataset.user.max() + 1
     n_items = interactions_dataset.item.max() + 1
 
-    positive_interactions = interactions_dataset.loc[interactions_dataset["relevant"] == 1, ["user", "item", "relevant"]]
+    positive_interactions = interactions_dataset.loc[interactions_dataset["relevant"] == 1, interactions_cols]
     positive_interactions_tensor = torch.tensor(positive_interactions.values, device=device)
     
 
@@ -59,15 +59,21 @@ def generate_bpr_dataset(interactions_dataset, num_negatives=3):
     
     neg_items = neg_samples.reshape(len(pos_items) * num_negatives, 1)
     
-    indices = positive_interactions_tensor[:, 0:2]
+    # Remove only the last tupple.
+    cut_off = len(interactions_cols) - 1
+    indices = positive_interactions_tensor[:, 0:cut_off]
     repeated_positives = indices.repeat_interleave(num_negatives, dim=0)
     triplets = torch.concat([repeated_positives, neg_items], dim=1)
 
     return triplets
 
-def create_train_dataset(data, train_ratio=1.0):
-    bpr_dataset = generate_bpr_dataset(data, num_negatives=5)
-    data_bpr = bprMFDataloader(bpr_dataset)
+def create_train_dataset(data, train_ratio=1.0, should_debias=False):
+    bpr_dataset = generate_bpr_dataset(data, num_negatives=5, use_click_debiasing=should_debias)
+    
+    if should_debias:
+        data_bpr = bprMFLClickDebiasingDataloader(bpr_dataset)
+    else:
+        data_bpr = bprMFDataloader(bpr_dataset)
 
 
     train_len = int(train_ratio * len(data_bpr))
@@ -76,50 +82,17 @@ def create_train_dataset(data, train_ratio=1.0):
 
     train_data, _ = random_split(data_bpr, [train_len, test_len])
 
-
-
     return DataLoader(train_data, batch_size=1024, shuffle=True)
 
 
 def train(model, data, train_ratio=1.0):
-    train_data_loader = create_train_dataset(data, train_ratio)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    if isinstance(model, bprMFWithClickDebiasing):
+        train_data_loader = create_train_dataset(data, train_ratio, should_debias=True)
+    else:
+        train_data_loader = create_train_dataset(data, train_ratio, should_debias=False)
 
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     losses = model.fit(train_data_loader, optimizer)
 
     return model, losses
     
-
-def generate_bpr_dataset_with_click_data(interactions_dataset, num_negatives=3):
-    user2items = defaultdict(set)
-    for u, i in zip(interactions_dataset["user"], interactions_dataset["item"]):
-        user2items[u].add(i)
-
-    feedback_df = interactions_dataset[["user", "item", "click"]]
-    positives = feedback_df[~feedback_df["click"].isna()].to_numpy()
-    users_pos = positives[:, 0].astype(int)
-    items_pos = positives[:, 1].astype(int)
-    click_pos = positives[:, 2].astype(int)
-
-    tuples = []
-    # Assuming that the items are zero-indexed and continuous.
-    n_items = int(interactions_dataset["item"].max()) + 1
-    all_items = np.arange(n_items)
-
-    for u, i_pos, click_positions in zip(users_pos, items_pos, click_pos):
-        seen = user2items[u]
-        candidates = np.setdiff1d(all_items, list(seen), assume_unique=True)
-        
-        if len(candidates) >= num_negatives:
-            sampled_neg = np.random.choice(candidates, size=num_negatives, replace=False)
-        else:
-            sampled_neg = np.random.choice(candidates, size=num_negatives, replace=True)
-
-        u_vec = np.repeat(u, len(sampled_neg)) 
-        i_pos_vec = np.repeat(i_pos, len(sampled_neg)) 
-        click_pos_vec = np.repeat(click_positions, len(sampled_neg)) 
-
-        tuples.append(np.stack([u_vec, i_pos_vec, click_pos_vec, sampled_neg], axis=1))
-
-    tuples = np.vstack(tuples)
-    return pd.DataFrame(tuples, columns=["user", "pos_item", "click_position", "neg_item"])

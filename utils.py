@@ -6,61 +6,41 @@ from torch.utils.data import DataLoader, random_split
 import torch
 
 from bprMf.bpr_mf import bprMFDataloader
-import time
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
-def build_positive_and_negatives_bpr_tensor(user_positives_tensor, n_users, n_items):
-
-    user_ids, item_ids = torch.meshgrid(
-        torch.arange(n_users, device=device),
-        torch.arange(n_items, device=device),
-        indexing='ij'
-    )
-    all_user_item_pairs = torch.stack([user_ids.reshape(-1), item_ids.reshape(-1)], dim=1)
-
-    max_item = n_items + 1 
-    all_pairs_1d = all_user_item_pairs[:, 0] * max_item + all_user_item_pairs[:, 1]
-    indices_1d = user_positives_tensor[:, 0] * max_item + user_positives_tensor[:, 1]
-
-    mask = ~torch.isin(all_pairs_1d, indices_1d)
-    neg_examples = all_user_item_pairs[mask]
-    neg_examples = torch.cat([
-        neg_examples,
-        torch.zeros((neg_examples.shape[0], 1), device=device,dtype=torch.int)
-    ], dim=1)
-
-    return torch.cat([neg_examples, user_positives_tensor], dim=0)
-
-
 def generate_bpr_dataset(interactions_dataset, num_negatives=3):
-    positive_interactions = interactions_dataset.loc[interactions_dataset["relevant"] == 1, ["user", "item", "relevant"]]
+
     n_users = interactions_dataset.user.max() + 1
     n_items = interactions_dataset.item.max() + 1
+
+    positive_interactions = interactions_dataset.loc[interactions_dataset["relevant"] == 1, ["user", "item", "relevant"]]
     positive_interactions_tensor = torch.tensor(positive_interactions.values, device=device)
-    indices = positive_interactions_tensor[:, 0:2]
-    train_tensor = build_positive_and_negatives_bpr_tensor(positive_interactions_tensor, n_users, n_items)
+    
 
-    user_ids = train_tensor[:, 0].long()
-    item_ids = train_tensor[:, 1].long()
-    labels   = train_tensor[:, 2].long()
+    pos_users = positive_interactions_tensor[:, 0].long()
+    pos_items = positive_interactions_tensor[:, 1].long()
 
-    pos_mask = torch.zeros((n_users, n_items), dtype=torch.bool, device=train_tensor.device)
-    pos_mask[user_ids[labels==1], item_ids[labels==1]] = True
+    # We flag each positive user x item pair
+    pos_mask = torch.zeros((n_users, n_items), dtype=torch.bool, device=positive_interactions_tensor.device)
+    pos_mask[pos_users, pos_items] = True
 
-    pos_users = user_ids[labels==1]
-    pos_items = item_ids[labels==1]
-
+    # Create a sample of size pos_items x num_negatives. With this,
+    # We can sample exactly num_negatives for each pos_item. Using
+    # pos_mask above, we assure that the sampled negatives are 
+    # attributed exclusively to positive items.
     neg_samples = torch.randint(
         low=0,
         high=n_items,
         size=(len(pos_items), num_negatives),
-        device=train_tensor.device
+        device=positive_interactions_tensor.device
     )
 
+    # Ideally, this should be empty: all of the sampled negatives
+    # are not present in pos_mask.
     bad = pos_mask[pos_users.unsqueeze(1), neg_samples]
 
+    # Finally, we re-sample until the bad tensor is empty.
     while True:
         if not bad.any():
             break
@@ -68,13 +48,18 @@ def generate_bpr_dataset(interactions_dataset, num_negatives=3):
         # re-draw only the bad negatives
         num_bad = bad.sum()
         neg_samples[bad] = torch.randint(
-            0, n_items, size=(num_bad,), device=train_tensor.device
+            low=0,
+            high=n_items,
+            size=(num_bad,),
+            device=positive_interactions_tensor.device
         )
         
         # recompute mask
         bad = pos_mask[pos_users.unsqueeze(1), neg_samples]
     
     neg_items = neg_samples.reshape(len(pos_items) * num_negatives, 1)
+    
+    indices = positive_interactions_tensor[:, 0:2]
     repeated_positives = indices.repeat_interleave(num_negatives, dim=0)
     triplets = torch.concat([repeated_positives, neg_items], dim=1)
 

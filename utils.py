@@ -28,14 +28,14 @@ def generate_bpr_triplets(interactions_dataset, num_negatives=3, use_click_debia
         - The function uses PyTorch tensors for efficient computation on GPU if available.
     """
     if use_click_debiasing:
-        interactions_cols = ["user", "item", "click", "relevant"]
+        interactions_cols = ["user", "item", "clicked_at", "relevant"]
     else:
         interactions_cols = ["user", "item", "relevant"]
 
     n_users = interactions_dataset.user.max() + 1
     n_items = interactions_dataset.item.max() + 1
 
-    positive_interactions = interactions_dataset.loc[interactions_dataset["relevant"] == 1, interactions_cols]
+    positive_interactions = interactions_dataset.loc[interactions_dataset["relevant"] == 1, interactions_cols].astype(int)
     positive_interactions_tensor = torch.tensor(positive_interactions.values, device=device)
     
 

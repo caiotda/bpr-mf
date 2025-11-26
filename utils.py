@@ -59,7 +59,7 @@ def generate_bpr_triplets(interactions_dataset, num_negatives=3, use_click_debia
     
     neg_items = neg_samples.reshape(len(pos_items) * num_negatives, 1)
     
-    # Remove only the last tupple.
+    # Remove only the last tuple.
     cut_off = len(interactions_cols) - 1
     indices = positive_interactions_tensor[:, 0:cut_off]
     repeated_positives = indices.repeat_interleave(num_negatives, dim=0)

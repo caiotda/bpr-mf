@@ -54,21 +54,21 @@ class bprMFBase(nn.Module, abc.ABC):
     def fit(self, train_data_loader, optimizer, debug=False):
         pass
 
-    def forward(self, user, item):
-        assert torch.all(user >= 0) and torch.all(user < self.user_emb.num_embeddings), "User index out of range"
+    def forward(self, users, item):
+        assert torch.all(users >= 0) and torch.all(users < self.user_emb.num_embeddings), "Users index out of range"
         assert torch.all(item >= 0) and torch.all(item < self.item_emb.num_embeddings), "Item index out of range"
 
-        user_emb = self.user_emb(user)
+        user_emb = self.user_emb(users)
         item_emb = self.item_emb(item)
         mult = user_emb @ item_emb.T
         return mult
 
-    def predict(self, user, candidates, mask=None, k=100):
+    def predict(self, users, candidates,k=100, mask=None):
         """
         Predict top-k recommended items for a batch of users.
 
         Args:
-            user (Tensor): A batch of users being scored.
+            users (Tensor): A batch of users being scored.
             candidates (Tensor): A tensor of items to be scored.
             mask (Tensor, optional): A tensor indicating item-user pairs to ignore 
                 (e.g., items already recommended to the users). Defaults to None.
@@ -79,9 +79,9 @@ class bprMFBase(nn.Module, abc.ABC):
                 - candidate_ids (Tensor): The top-k recommended item IDs for each user.
                 - scored_matrix (Tensor): The scores of the top-k items for each user.
         """
-        self.check_input_tensor_dimensions_for_prediction(user, candidates, mask)
+        self.check_input_tensor_dimensions_for_prediction(users, candidates, mask)
         items_list = candidates
-        raw_prediction = self.forward(user, items_list)
+        raw_prediction = self.forward(users, items_list)
         if mask is not None:
             output = torch.where(mask == 1, raw_prediction, float('-inf'))
         else:
@@ -113,7 +113,7 @@ class bprMFBase(nn.Module, abc.ABC):
 
         users_tensor = torch.tensor(users, dtype=torch.long, device=device)
         items_tensor = torch.tensor(items, dtype=torch.long, device=device)
-        item_recs = self.predict(users_tensor, items_tensor, k)[0]
+        item_recs, _ = self.predict(users=users_tensor,candidates=items_tensor, k=k)
 
         scored_df = test_df.copy()
 

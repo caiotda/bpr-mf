@@ -11,11 +11,10 @@ from bprMf.bpr_utils import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_c
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class bprMFDataloader(Dataset):
-    def __init__(self, bpr_df):
-        self.data = bpr_df
-        self.users = torch.tensor(bpr_df["user"].values, dtype=torch.long)
-        self.pos_items = torch.tensor(bpr_df["pos_item"].values, dtype=torch.long)
-        self.neg_items = torch.tensor(bpr_df["neg_item"].values, dtype=torch.long)
+    def __init__(self, bpr_tensor):
+        self.users = bpr_tensor[:, 0]
+        self.pos_items = bpr_tensor[:, 1]
+        self.neg_items = bpr_tensor[:, 2]
 
     def __len__(self):
         return len(self.users)
@@ -24,12 +23,11 @@ class bprMFDataloader(Dataset):
         return self.users[idx], self.pos_items[idx], self.neg_items[idx]
 
 class bprMFLClickDebiasingDataloader(Dataset):
-    def __init__(self, bpr_df):
-        self.data = bpr_df
-        self.users = torch.tensor(bpr_df["user"].values, dtype=torch.long)
-        self.pos_items = torch.tensor(bpr_df["pos_item"].values, dtype=torch.long)
-        self.neg_items = torch.tensor(bpr_df["neg_item"].values, dtype=torch.long)
-        self.click_position = torch.tensor(bpr_df["click_position"].values, dtype=torch.long)
+    def __init__(self, bpr_tensor):
+        self.users = bpr_tensor[:, 0]
+        self.pos_items = bpr_tensor[:, 1]
+        self.neg_items = bpr_tensor[:, 2]
+        self.click_position = bpr_tensor[:, 3]
 
     def __len__(self):
         return len(self.users)

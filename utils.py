@@ -6,6 +6,27 @@ from bprMf.bpr_mf import bprMFDataloader, bprMFLClickDebiasingDataloader, bprMFW
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def generate_bpr_triplets(interactions_dataset, num_negatives=3, use_click_debiasing=False):
+    """
+    Generates triplets of user, positive item, and negative item for Bayesian Personalized Ranking (BPR) training.
+    Args:
+        interactions_dataset (pd.DataFrame): A pandas DataFrame containing user-item interaction data. 
+            It must include the columns "user", "item", and "relevant". If `use_click_debiasing` is True, 
+            it should also include the "click" column.
+        num_negatives (int, optional): The number of negative samples to generate for each positive interaction. 
+            Defaults to 3.
+        use_click_debiasing (bool, optional): Whether to include the "click" column in the interactions dataset 
+            for debiasing purposes. Defaults to False.
+    Returns:
+        torch.Tensor: A tensor of shape `(num_positive_interactions * num_negatives, len(interactions_cols))` 
+            containing the generated triplets. Each row represents a triplet in the format 
+            `[user, positive_item, negative_item]`.
+    Notes:
+        - The function ensures that the negative items sampled for each user are not part of their positive 
+          interactions.
+        - The `interactions_dataset` should have integer-encoded "user" and "item" columns, where users and 
+          items are indexed from 0 to `n_users - 1` and `n_items - 1`, respectively.
+        - The function uses PyTorch tensors for efficient computation on GPU if available.
+    """
     if use_click_debiasing:
         interactions_cols = ["user", "item", "click", "relevant"]
     else:

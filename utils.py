@@ -103,16 +103,16 @@ def create_bpr_dataloader(data, train_ratio=1.0, should_debias=False):
 
     train_data, _ = random_split(data_bpr, [train_len, test_len])
 
-    return DataLoader(train_data, batch_size=1024, shuffle=True)
+    return DataLoader(train_data, batch_size=256, shuffle=True)
 
 
-def train(model, data, train_ratio=1.0):
+def train(model, data, train_ratio=1.0, debug=False):
     if isinstance(model, bprMFWithClickDebiasing):
         train_data_loader = create_bpr_dataloader(data, train_ratio, should_debias=True)
     else:
         train_data_loader = create_bpr_dataloader(data, train_ratio, should_debias=False)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    losses = model.fit(train_data_loader, optimizer)
+    losses = model.fit(train_data_loader, optimizer, debug)
 
     return model, losses

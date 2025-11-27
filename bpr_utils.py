@@ -35,12 +35,11 @@ def bpr_loss_with_reg(
             negative_item_factor,
             reg_lambda=1e-4):
     loss = -torch.log(torch.sigmoid(positive_item_scores - negative_item_scores) + 1e-8).mean()
-    batch_size = positive_item_scores.size(0)
     # Applies l2 regularization as per BPR-OPT.
     reg = reg_lambda * (
-        user_factor.norm(2).pow(2) +
-        positive_item_factor.norm(2).pow(2) +
-        negative_item_factor.norm(2).pow(2)
-    ) / batch_size
+        user_factor.pow(2).sum(dim=1) +
+        positive_item_factor.pow(2).sum(dim=1) +
+        negative_item_factor.pow(2).sum(dim=1)
+    ).mean()
 
     return loss + reg

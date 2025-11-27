@@ -5,6 +5,7 @@ from torch import nn
 from torch.utils.data import Dataset
 
 import numpy as np
+import pandas as pd
 
 from bprMf.bpr_utils import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
 
@@ -60,10 +61,10 @@ class bprMFBase(nn.Module, abc.ABC):
 
         user_emb = self.user_emb(users)
         item_emb = self.item_emb(item)
-        mult = user_emb @ item_emb.T
+        mult = (user_emb * item_emb).sum(dim=1)
         return mult
 
-    def predict(self, users, candidates,k=100, mask=None):
+    def predict(self, users, candidates, batch_size=1_000_000):
         """
         Predict top-k recommended items for a batch of users.
 
@@ -79,9 +80,44 @@ class bprMFBase(nn.Module, abc.ABC):
                 - candidate_ids (Tensor): The top-k recommended item IDs for each user.
                 - scored_matrix (Tensor): The scores of the top-k items for each user.
         """
+
+        user_grid, item_grid = torch.meshgrid(users, candidates, indexing='ij')
+        combinations = torch.stack([user_grid.reshape(-1), item_grid.reshape(-1)], dim=1)
+
+        all_users = []
+        all_items = []
+        all_scores = []
+
+        with torch.no_grad():
+            for batch_start in range(0, len(combinations), batch_size):
+                batch_end = min(batch_start + batch_size, len(combinations))
+                users_batch = combinations[batch_start:batch_end, 0].to(device)
+                items_batch = combinations[batch_start:batch_end, 1].to(device)
+                scores_batch = self.forward(users_batch, items_batch)
+                all_users.append(users_batch)
+                all_items.append(items_batch)
+                all_scores.append(scores_batch)
+
+            users_all = torch.cat(all_users, dim=0).cpu().unsqueeze(1).long()
+            items_all = torch.cat(all_items, dim=0).cpu().unsqueeze(1).long()
+            scores_all = torch.cat(all_scores, dim=0).cpu().unsqueeze(1)
+
+            del all_users
+            del all_items
+            del all_scores
+        
+
+        n_users = len(users) + 1
+        n_candidates = len(candidates) + 1
+        prediction_matrix = -1 * torch.inf * torch.ones(size=(n_users, n_candidates))
+        prediction_matrix[users_all, items_all] = scores_all
+
+        return prediction_matrix
+        
+    
+    def recommend(self, users, candidates, k=100, mask=None):
         self.check_input_tensor_dimensions_for_prediction(users, candidates, mask)
-        items_list = candidates
-        raw_prediction = self.forward(users, items_list)
+        raw_prediction = self.predict(users, candidates)
         if mask is not None:
             output = torch.where(mask == 1, raw_prediction, float('-inf'))
         else:
@@ -91,6 +127,8 @@ class bprMFBase(nn.Module, abc.ABC):
         # Map indices back to actual candidate item IDs
         candidate_ids = candidates[indices[:, :k]]
         return candidate_ids, scored_matrix[:, :k]
+
+
 
     def check_input_tensor_dimensions_for_prediction(self, user, candidates, mask):
         assert user.dim() == 1, "User tensor must be 1-dimensional"
@@ -113,12 +151,9 @@ class bprMFBase(nn.Module, abc.ABC):
 
         users_tensor = torch.tensor(users, dtype=torch.long, device=device)
         items_tensor = torch.tensor(items, dtype=torch.long, device=device)
-        item_recs, _ = self.predict(users=users_tensor,candidates=items_tensor, k=k)
+        item_recs, _ = self.recommend(users=users_tensor,candidates=items_tensor, k=k)
 
-        scored_df = test_df.copy()
-
-        user_to_pred = dict(zip(users.values, item_recs.cpu().tolist()))
-        scored_df[f"top_{k}_rec"] = scored_df["user"].map(user_to_pred)
+        scored_df = pd.DataFrame(zip(users_tensor.tolist(), item_recs.tolist()), columns=["user", f"top_{k}_rec"])
         
         return scored_df
 
@@ -164,6 +199,12 @@ class bprMf(bprMFBase):
             epoch_loss = float(np.mean(batch_losses)) if batch_losses else 0.0
             train_epoch_losses.append(epoch_loss)
             if debug:
+                user_norm = users_factors.norm(dim=1)
+                pos_item_norm = positive_items_factors.norm(dim=1)
+                neg_item_norm = negative_items_factors.norm(dim=1)
+                print("User norm", user_norm.mean().item(), user_norm.std().item())
+                print("pos_item norm", pos_item_norm.mean().item(), pos_item_norm.std().item())
+                print("neg_item norm", neg_item_norm.mean().item(), neg_item_norm.std().item())
                 print(f"Train epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{self.n_epochs}")
         return train_epoch_losses
 

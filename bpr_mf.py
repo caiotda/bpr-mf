@@ -25,7 +25,7 @@ class bprMFBase(nn.Module, abc.ABC):
         self.n_epochs = n_epochs
 
     @abc.abstractmethod
-    def fit(self, train_df, optimizer, debug=False):
+    def fit(self, train_df, debug=False, lr=1e-3):
         pass
 
     def forward(self, users, item):
@@ -185,7 +185,7 @@ class bprMf(bprMFBase):
                 print(f"Train epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{self.n_epochs}")
         return train_epoch_losses
 
-    def evaluate(self, test_df,k=20):
+    def evaluate(self, test_df, k=20):
         self.eval()
         test_losses = []
         test_data_loader = create_bpr_dataloader(test_df, should_debias=False)
@@ -212,7 +212,7 @@ class bprMf(bprMFBase):
                         reg_lambda=self.reg_lambda
                     )
                     test_losses.append(loss.item())
-                avg_test_loss = float(np.mean(test_losses))
+                avg_test_loss = float(np.mean(test_losses)) if test_losses else 0.0
         finally:
             self.train()
         return avg_test_loss

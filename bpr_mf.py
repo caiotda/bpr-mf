@@ -126,9 +126,9 @@ class bprMFBase(nn.Module, abc.ABC):
 
         users_tensor = torch.tensor(users, dtype=torch.long, device=device)
         items_tensor = torch.tensor(items, dtype=torch.long, device=device)
-        item_recs, _ = self.recommend(users=users_tensor,candidates=items_tensor, k=k)
+        item_recs, item_scores = self.recommend(users=users_tensor,candidates=items_tensor, k=k)
 
-        scored_df = pd.DataFrame(zip(users_tensor.tolist(), item_recs.tolist()), columns=["user", "top_k_rec_id"])
+        scored_df = pd.DataFrame(zip(users_tensor.tolist(), item_recs.tolist(), item_scores.tolist()), columns=["user", "top_k_rec_id", "top_k_rec_score"])
         
         return scored_df
 

@@ -1,9 +1,53 @@
-from torch.utils.data import DataLoader, random_split
 import torch
+from torch.utils.data import Dataset, DataLoader
 
-from bprMf.bpr_mf import bprMFDataloader, bprMFLClickDebiasingDataloader, bprMFWithClickDebiasing
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+class bprMFDataloader(Dataset):
+    def __init__(self, bpr_tensor):
+        self.users = bpr_tensor[:, 0]
+        self.pos_items = bpr_tensor[:, 1]
+        self.neg_items = bpr_tensor[:, 2]
+
+    def __len__(self):
+        return len(self.users)
+
+    def __getitem__(self, idx):
+        return self.users[idx], self.pos_items[idx], self.neg_items[idx]
+
+class bprMFLClickDebiasingDataloader(Dataset):
+    def __init__(self, bpr_tensor):
+        self.users = bpr_tensor[:, 0]
+        self.pos_items = bpr_tensor[:, 1]
+        self.neg_items = bpr_tensor[:, 2]
+        self.click_position = bpr_tensor[:, 3]
+
+    def __len__(self):
+        return len(self.users)
+
+    def __getitem__(self, idx):
+        return (
+            self.users[idx],
+            self.pos_items[idx],
+            self.neg_items[idx],
+            self.click_position[idx]
+        )
+
+
+def create_bpr_dataloader(df, should_debias=False):
+    bpr_dataset = generate_bpr_triplets(df, num_negatives=5, use_click_debiasing=should_debias)
+    
+    if should_debias:
+        data_bpr = bprMFLClickDebiasingDataloader(bpr_dataset)
+    else:
+        data_bpr = bprMFDataloader(bpr_dataset)
+
+    return DataLoader(data_bpr, batch_size=256, shuffle=True)
+
+
+
 
 def generate_bpr_triplets(interactions_dataset, num_negatives=3, use_click_debiasing=False):
     """
@@ -87,32 +131,3 @@ def generate_bpr_triplets(interactions_dataset, num_negatives=3, use_click_debia
     triplets = torch.concat([repeated_positives, neg_items], dim=1)
 
     return triplets
-
-def create_bpr_dataloader(data, train_ratio=1.0, should_debias=False):
-    bpr_dataset = generate_bpr_triplets(data, num_negatives=5, use_click_debiasing=should_debias)
-    
-    if should_debias:
-        data_bpr = bprMFLClickDebiasingDataloader(bpr_dataset)
-    else:
-        data_bpr = bprMFDataloader(bpr_dataset)
-
-
-    train_len = int(train_ratio * len(data_bpr))
-    test_len = len(data_bpr) - train_len
-
-
-    train_data, _ = random_split(data_bpr, [train_len, test_len])
-
-    return DataLoader(train_data, batch_size=256, shuffle=True)
-
-
-def train(model, data, train_ratio=1.0, debug=False):
-    if isinstance(model, bprMFWithClickDebiasing):
-        train_data_loader = create_bpr_dataloader(data, train_ratio, should_debias=True)
-    else:
-        train_data_loader = create_bpr_dataloader(data, train_ratio, should_debias=False)
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    losses = model.fit(train_data_loader, optimizer, debug)
-
-    return model, losses

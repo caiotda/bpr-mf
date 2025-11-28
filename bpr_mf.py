@@ -2,44 +2,17 @@
 import abc
 import torch
 from torch import nn
-from torch.utils.data import Dataset
+
 
 import numpy as np
 import pandas as pd
 
-from bprMf.bpr_utils import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
+from bprMf.utils.learner import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
+from bprMf.utils.data import create_bpr_dataloader
+from bprMf.evaluation import Evaluator
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-class bprMFDataloader(Dataset):
-    def __init__(self, bpr_tensor):
-        self.users = bpr_tensor[:, 0]
-        self.pos_items = bpr_tensor[:, 1]
-        self.neg_items = bpr_tensor[:, 2]
-
-    def __len__(self):
-        return len(self.users)
-
-    def __getitem__(self, idx):
-        return self.users[idx], self.pos_items[idx], self.neg_items[idx]
-
-class bprMFLClickDebiasingDataloader(Dataset):
-    def __init__(self, bpr_tensor):
-        self.users = bpr_tensor[:, 0]
-        self.pos_items = bpr_tensor[:, 1]
-        self.neg_items = bpr_tensor[:, 2]
-        self.click_position = bpr_tensor[:, 3]
-
-    def __len__(self):
-        return len(self.users)
-
-    def __getitem__(self, idx):
-        return (
-            self.users[idx],
-            self.pos_items[idx],
-            self.neg_items[idx],
-            self.click_position[idx]
-        )
 
 class bprMFBase(nn.Module, abc.ABC):
     def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs):
@@ -52,7 +25,7 @@ class bprMFBase(nn.Module, abc.ABC):
         self.n_epochs = n_epochs
 
     @abc.abstractmethod
-    def fit(self, train_data_loader, optimizer, debug=False):
+    def fit(self, train_df, debug=False, lr=1e-3):
         pass
 
     def forward(self, users, item):
@@ -167,7 +140,9 @@ class bprMf(bprMFBase):
     def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs):
         super().__init__(num_users, num_items, factors, reg_lambda, n_epochs)
 
-    def fit(self, train_data_loader, optimizer, debug=False):
+    def fit(self, train_df, debug=False, lr=1e-3):
+        train_data_loader = create_bpr_dataloader(train_df, should_debias=False)
+        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         train_epoch_losses = []
         self.train()
         for epoch in range(self.n_epochs):
@@ -210,9 +185,10 @@ class bprMf(bprMFBase):
                 print(f"Train epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{self.n_epochs}")
         return train_epoch_losses
 
-    def evaluate(self, test_data_loader):
+    def evaluate(self, test_df, k=20):
         self.eval()
         test_losses = []
+        test_data_loader = create_bpr_dataloader(test_df, should_debias=False)
         try:
             with torch.no_grad():
                 for batch in test_data_loader:
@@ -236,9 +212,11 @@ class bprMf(bprMFBase):
                         reg_lambda=self.reg_lambda
                     )
                     test_losses.append(loss.item())
+                avg_test_loss = float(np.mean(test_losses)) if test_losses else 0.0
         finally:
             self.train()
-        return float(np.mean(test_losses)) if test_losses else 0.0
+        return avg_test_loss
+
 
 
 
@@ -247,7 +225,9 @@ class bprMFWithClickDebiasing(bprMFBase):
     def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs):
         super().__init__(num_users, num_items, factors, reg_lambda, n_epochs)
 
-    def fit(self, train_data_loader, optimizer, debug=False):
+    def fit(self, train_df, debug=False, lr=1e-3):
+        train_data_loader = create_bpr_dataloader(train_df, should_debias=True)
+        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         train_epoch_losses = []
         self.train()
         for epoch in range(self.n_epochs):
@@ -287,9 +267,10 @@ class bprMFWithClickDebiasing(bprMFBase):
                 print(f"Train epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{self.n_epochs}")
         return train_epoch_losses
     
-    def evaluate(self, test_data_loader):
+    def evaluate(self, test_df, k=20):
         self.eval()
         test_losses = []
+        test_data_loader = create_bpr_dataloader(test_df, should_debias=True)
         try:
             with torch.no_grad():
                 for batch in test_data_loader:

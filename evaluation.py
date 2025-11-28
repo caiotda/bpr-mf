@@ -2,12 +2,16 @@ import torch
 import pandas as pd
 import numpy as np
 
-class Evaluate():
-    def __init__(self, model, test_df, interaction_data, k=20):
+from bprMf.utils.data import generate_bpr_triplets
+
+class Evaluator():
+    def __init__(self, model, test_df, k=20):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self._df = test_df
+        bpr_triplets_tensor = generate_bpr_triplets(test_df)
+        bpr_df = pd.DataFrame(bpr_triplets_tensor.tolist(), columns=["user", "pos_item", "neg_item"])
+        self._df = bpr_df
         self.model = model
-        self.interaction = interaction_data
+        self.interaction = test_df
         self.k = k
         self.device = device
         self.test_set = self._prepare_test_set()

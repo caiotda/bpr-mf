@@ -3,9 +3,9 @@ import pandas as pd
 import numpy as np
 
 class Evaluate():
-    def __init__(self, model, test_set_loader, interaction_data, k=20):
+    def __init__(self, model, test_df, interaction_data, k=20):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self._df = test_set_loader.dataset.data
+        self._df = test_df
         self.model = model
         self.interaction = interaction_data
         self.k = k
@@ -50,7 +50,7 @@ class Evaluate():
 
 
     def MAP_at_k(self):
-        map_k = self.test_set.apply(lambda r: self.average_precision_at_k(r[f"top_{self.k}_rec"], r["relevant_items"]), axis=1).mean().item()
+        map_k = self.test_set.apply(lambda r: self.average_precision_at_k(r[f"top_k_rec_id"], r["relevant_items"]), axis=1).mean().item()
         return map_k
 
 

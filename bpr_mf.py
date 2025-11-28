@@ -74,6 +74,8 @@ class bprMFBase(nn.Module, abc.ABC):
             mask (Tensor, optional): A tensor indicating item-user pairs to ignore 
                 (e.g., items already recommended to the users). Defaults to None.
             k (int, optional): The number of top items to return. Defaults to 100.
+            batch_size (int, optional): the ammount of user x item pairs embeddings
+             loaded per batch
 
         Returns:
             Tuple[Tensor, Tensor]: A tuple containing:
@@ -153,7 +155,7 @@ class bprMFBase(nn.Module, abc.ABC):
         items_tensor = torch.tensor(items, dtype=torch.long, device=device)
         item_recs, _ = self.recommend(users=users_tensor,candidates=items_tensor, k=k)
 
-        scored_df = pd.DataFrame(zip(users_tensor.tolist(), item_recs.tolist()), columns=["user", f"top_{k}_rec"])
+        scored_df = pd.DataFrame(zip(users_tensor.tolist(), item_recs.tolist()), columns=["user", "top_k_rec_id"])
         
         return scored_df
 

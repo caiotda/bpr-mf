@@ -7,7 +7,9 @@ from torch import nn
 import numpy as np
 import pandas as pd
 
-from bprMf.bpr_utils import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click, create_bpr_dataloader
+from bprMf.utils.learner import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
+from bprMf.utils.data import create_bpr_dataloader
+from bprMf.evaluation import Evaluator
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -183,9 +185,10 @@ class bprMf(bprMFBase):
                 print(f"Train epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{self.n_epochs}")
         return train_epoch_losses
 
-    def evaluate(self, test_data_loader):
+    def evaluate(self, test_df,k=20):
         self.eval()
         test_losses = []
+        test_data_loader = create_bpr_dataloader(test_df, should_debias=False)
         try:
             with torch.no_grad():
                 for batch in test_data_loader:
@@ -209,9 +212,11 @@ class bprMf(bprMFBase):
                         reg_lambda=self.reg_lambda
                     )
                     test_losses.append(loss.item())
+                avg_test_loss = float(np.mean(test_losses))
         finally:
             self.train()
-        return float(np.mean(test_losses)) if test_losses else 0.0
+        return avg_test_loss
+
 
 
 
@@ -262,9 +267,10 @@ class bprMFWithClickDebiasing(bprMFBase):
                 print(f"Train epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{self.n_epochs}")
         return train_epoch_losses
     
-    def evaluate(self, test_data_loader):
+    def evaluate(self, test_df, k=20):
         self.eval()
         test_losses = []
+        test_data_loader = create_bpr_dataloader(test_df, should_debias=True)
         try:
             with torch.no_grad():
                 for batch in test_data_loader:

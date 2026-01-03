@@ -19,6 +19,8 @@ class bprMFBase(nn.Module, abc.ABC):
         super().__init__()
         self.user_emb = nn.Embedding(num_embeddings=num_users, embedding_dim=factors)
         self.item_emb = nn.Embedding(num_embeddings=num_items, embedding_dim=factors)
+        self.n_users = num_users
+        self.n_items = num_items
         nn.init.normal_(self.user_emb.weight, mean=0, std=0.01)
         nn.init.normal_(self.item_emb.weight, mean=0, std=0.01)
         self.reg_lambda = reg_lambda
@@ -82,8 +84,8 @@ class bprMFBase(nn.Module, abc.ABC):
             del all_scores
         
 
-        n_users = len(users) + 1
-        n_candidates = len(candidates) + 1
+        n_users = self.n_users
+        n_candidates = self.n_items
         prediction_matrix = -1 * torch.inf * torch.ones(size=(n_users, n_candidates))
         prediction_matrix[users_all, items_all] = scores_all
 

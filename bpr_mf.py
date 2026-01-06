@@ -8,6 +8,7 @@ import pandas as pd
 
 from bprMf.utils.learner import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
 from bprMf.utils.data import create_bpr_dataloader
+from bprMf.utils.tensor import create_id_to_idx_lookup_tensor
 from tqdm import trange
 
 
@@ -27,9 +28,6 @@ class bprMFBase(nn.Module, abc.ABC):
     @abc.abstractmethod
     def fit(self, train_df, debug=False, lr=1e-3):
         pass
-
-    def id_to_idx(tensor, lookup):
-        return lookup[tensor]
 
     def forward(self, users, item):
         assert torch.all(users >= 0) and torch.all(
@@ -92,13 +90,8 @@ class bprMFBase(nn.Module, abc.ABC):
             del all_scores
 
         return users_all, items_all, scores_all
+    
 
-        # n_users = len(users)
-        # n_candidates = len(candidates)
-        # prediction_matrix = -1 * torch.inf * torch.ones(size=(n_users, n_candidates))
-        # prediction_matrix[users_all, items_all] = scores_all
-
-        # return prediction_matrix
 
     def recommend(self, users, candidates, k=100, mask=None):
         """
@@ -122,11 +115,8 @@ class bprMFBase(nn.Module, abc.ABC):
 
         users_stacked, items_stacked, scores = self.predict(users, candidates)
         
-        user_id_to_idx_lookup = -1 + torch.zeros(users.max().item() + 1, dtype=torch.long)
-        item_id_to_idx_lookup = -1 + torch.zeros(candidates.max().item() + 1, dtype=torch.long)
-        
-        user_id_to_idx_lookup[users] = torch.arange(n_users) 
-        item_id_to_idx_lookup[candidates] = torch.arange(n_candidates) 
+        user_id_to_idx_lookup = create_id_to_idx_lookup_tensor(users)
+        item_id_to_idx_lookup = create_id_to_idx_lookup_tensor(candidates)
         
         user_idx = user_id_to_idx_lookup[users_stacked]
         item_idx = item_id_to_idx_lookup[items_stacked]
@@ -139,10 +129,7 @@ class bprMFBase(nn.Module, abc.ABC):
         else:
             output = prediction_matrix
         # Sorts column-wise: each row contains the ranked recommendation
-        # Finalmente, eu aplico o mapa no scored matrix, mapeando idx pra id de novo.
-        # O indices sai de graça. Se o prediction matrix for do mesmo tamanho que candidates, ta tudo certo.
         scored_matrix, idx_matrix = output.sort(dim=1, descending=True)
-        # O problema aqui é que o tamanho de candidates e indices não é igual.
         # Map indices back to actual candidate item IDs
         candidate_ids = candidates[idx_matrix[:, :k]]
         return candidate_ids, scored_matrix[:, :k]

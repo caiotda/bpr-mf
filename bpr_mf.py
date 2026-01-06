@@ -44,21 +44,17 @@ class bprMFBase(nn.Module, abc.ABC):
 
     def predict(self, users, candidates, batch_size=1_000_000):
         """
-        Predict top-k recommended items for a batch of users.
+        Predict scores for all user-candidate item pairs.
 
         Args:
-            users (Tensor): A batch of users being scored.
-            candidates (Tensor): A tensor of items to be scored.
-            mask (Tensor, optional): A tensor indicating item-user pairs to ignore
-                (e.g., items already recommended to the users). Defaults to None.
-            k (int, optional): The number of top items to return. Defaults to 100.
-            batch_size (int, optional): the ammount of user x item pairs embeddings
-             loaded per batch
+            users (Tensor): A 1D tensor of user IDs or indices.
+            candidates (Tensor): A 1D tensor of candidate item IDs or indices.
+            batch_size (int, optional): Number of user-item pairs to process per batch.
 
         Returns:
-            Tuple[Tensor, Tensor]: A tuple containing:
-                - candidate_ids (Tensor): The top-k recommended item IDs for each user.
-                - scored_matrix (Tensor): The scores of the top-k items for each user.
+            users_all (Tensor): 2D tensor of user IDs for each scored pair, shape (num_pairs, 1).
+            items_all (Tensor): 2D tensor of item IDs for each scored pair, shape (num_pairs, 1).
+            scores_all (Tensor): 2D tensor of scores for each user-item pair, shape (num_pairs, 1).
         """
 
         user_grid, item_grid = torch.meshgrid(users, candidates, indexing="ij")

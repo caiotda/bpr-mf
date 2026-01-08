@@ -16,8 +16,12 @@ class bprMFBase(nn.Module, abc.ABC):
     def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs, dev):
         super().__init__()
         self.device = dev
-        self.user_emb = nn.Embedding(num_embeddings=num_users, embedding_dim=factors)
-        self.item_emb = nn.Embedding(num_embeddings=num_items, embedding_dim=factors)
+        self.user_emb = nn.Embedding(
+            num_embeddings=num_users, embedding_dim=factors, device=dev
+        )
+        self.item_emb = nn.Embedding(
+            num_embeddings=num_items, embedding_dim=factors, device=dev
+        )
         self.n_users = num_users
         self.n_items = num_items
         nn.init.normal_(self.user_emb.weight, mean=0, std=0.01)
@@ -76,7 +80,6 @@ class bprMFBase(nn.Module, abc.ABC):
                 all_items.append(items_batch)
                 all_scores.append(scores_batch)
 
-            # Por que ele faz .cpu?
             users_all = torch.cat(all_users, dim=0).cpu().unsqueeze(1).long()
             items_all = torch.cat(all_items, dim=0).cpu().unsqueeze(1).long()
             scores_all = torch.cat(all_scores, dim=0).cpu().unsqueeze(1)
@@ -86,8 +89,6 @@ class bprMFBase(nn.Module, abc.ABC):
             del all_scores
 
         return users_all, items_all, scores_all
-    
-
 
     def recommend(self, users, candidates, k=100, mask=None):
         """
@@ -110,10 +111,10 @@ class bprMFBase(nn.Module, abc.ABC):
         n_candidates = len(candidates)
 
         users_stacked, items_stacked, scores = self.predict(users, candidates)
-        
+
         user_id_to_idx_lookup = create_id_to_idx_lookup_tensor(users)
         item_id_to_idx_lookup = create_id_to_idx_lookup_tensor(candidates)
-        
+
         user_idx = user_id_to_idx_lookup[users_stacked]
         item_idx = item_id_to_idx_lookup[items_stacked]
 

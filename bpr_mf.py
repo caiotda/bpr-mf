@@ -137,28 +137,23 @@ class bprMFBase(nn.Module, abc.ABC):
     def evaluate(self, test_df, k=20):
         self.eval()
         map_scores = []
+        candidates = torch.tensor(test_df["item"].unique(), device=self.device)
         with torch.no_grad():
             for user_id, user_df in test_df.groupby("user"):
 
                 user_id = torch.tensor([user_id], device=self.device)
-                relevant_items = torch.tensor(
-                    list(set(user_df.item.values)), device=self.device
-                )
+                hist = set(user_df.item.values)
+                scores = self.forward(user_id, candidates)
 
-                scores = self.forward(user_id, relevant_items)
-
-                scores[list(relevant_items)] = -float("inf")
-
-                top_k_items = torch.topk(scores, k=k).indices.cpu().numpy()
-
+                top_k_indices = torch.topk(scores, k=k).indices
+                top_k_items = candidates[top_k_indices].cpu().numpy()
                 ap = average_precision_at_k(
-                    ranked_items=top_k_items, relevant_items=relevant_items, k=k
+                    ranked_items=top_k_items, relevant_items=list(hist), k=k
                 )
-
                 map_scores.append(ap)
-
         self.train()
-        return float(np.mean(map_scores))
+
+        return np.mean(map_scores).item()
 
     def check_input_tensor_dimensions_for_prediction(self, user, candidates, mask):
         assert user.dim() == 1, "User tensor must be 1-dimensional"

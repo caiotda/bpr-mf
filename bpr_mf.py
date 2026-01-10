@@ -9,6 +9,9 @@ import pandas as pd
 from bprMf.utils.learner import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
 from bprMf.utils.data import create_bpr_dataloader
 from bprMf.utils.tensor import create_id_to_idx_lookup_tensor
+
+
+from bprMf.evaluation import average_precision_at_k
 from tqdm import trange
 
 
@@ -131,6 +134,32 @@ class bprMFBase(nn.Module, abc.ABC):
         candidate_ids = candidates[idx_matrix[:, :k]]
         return candidate_ids, scored_matrix[:, :k]
 
+    def evaluate(self, test_df, k=20):
+        self.eval()
+        map_scores = []
+        with torch.no_grad():
+            for user_id, user_df in test_df.groupby("user"):
+
+                user_id = torch.tensor([user_id], device=self.device)
+                relevant_items = torch.tensor(
+                    list(set(user_df.item.values)), device=self.device
+                )
+
+                scores = self.forward(user_id, relevant_items)
+
+                scores[list(relevant_items)] = -float("inf")
+
+                top_k_items = torch.topk(scores, k=k).indices.cpu().numpy()
+
+                ap = average_precision_at_k(
+                    ranked_items=top_k_items, relevant_items=relevant_items, k=k
+                )
+
+                map_scores.append(ap)
+
+        self.train()
+        return float(np.mean(map_scores))
+
     def check_input_tensor_dimensions_for_prediction(self, user, candidates, mask):
         assert user.dim() == 1, "User tensor must be 1-dimensional"
         if mask is not None:
@@ -239,38 +268,6 @@ class bprMf(bprMFBase):
                 )
         return train_epoch_losses
 
-    def evaluate(self, test_df, k=20):
-        self.eval()
-        test_losses = []
-        test_data_loader = create_bpr_dataloader(test_df, should_debias=False)
-        try:
-            with torch.no_grad():
-                for batch in test_data_loader:
-                    user_ids, pos_item_ids, neg_item_ids = batch
-                    user_ids = user_ids.to(self.device)
-                    users_factors = self.user_emb(user_ids)
-                    pos_item_ids = pos_item_ids.to(self.device)
-                    neg_item_ids = neg_item_ids.to(self.device)
-
-                    pred_positive = self(user_ids, pos_item_ids)
-                    pred_negative = self(user_ids, neg_item_ids)
-
-                    positive_items_factors = self.item_emb(pos_item_ids)
-                    negative_items_factors = self.item_emb(neg_item_ids)
-                    loss = bpr_loss_with_reg(
-                        pred_positive,
-                        pred_negative,
-                        users_factors,
-                        positive_items_factors,
-                        negative_items_factors,
-                        reg_lambda=self.reg_lambda,
-                    )
-                    test_losses.append(loss.item())
-                avg_test_loss = float(np.mean(test_losses)) if test_losses else 0.0
-        finally:
-            self.train()
-        return avg_test_loss
-
 
 class bprMFWithClickDebiasing(bprMFBase):
     def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs, dev):
@@ -324,37 +321,3 @@ class bprMFWithClickDebiasing(bprMFBase):
                     f"Train epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{self.n_epochs}"
                 )
         return train_epoch_losses
-
-    def evaluate(self, test_df, k=20):
-        self.eval()
-        test_losses = []
-        test_data_loader = create_bpr_dataloader(test_df, should_debias=True)
-        try:
-            with torch.no_grad():
-                for batch in test_data_loader:
-                    user_ids, pos_item_ids, neg_item_ids, clicked_positions = batch
-                    user_ids = user_ids.to(self.device)
-                    users_factors = self.user_emb(user_ids)
-                    pos_item_ids = pos_item_ids.to(self.device)
-                    neg_item_ids = neg_item_ids.to(self.device)
-                    clicked_positions = clicked_positions.to(self.device)
-
-                    pred_positive = self(user_ids, pos_item_ids)
-                    pred_negative = self(user_ids, neg_item_ids)
-
-                    positive_items_factors = self.item_emb(pos_item_ids)
-                    negative_items_factors = self.item_emb(neg_item_ids)
-                    loss = bpr_loss_with_reg_with_debiased_click(
-                        pred_positive,
-                        pred_negative,
-                        clicked_positions,
-                        users_factors,
-                        positive_items_factors,
-                        negative_items_factors,
-                        self.reg_lambda,
-                    )
-                    test_losses.append(loss.item())
-            avg_test_loss = float(np.mean(test_losses))
-        finally:
-            self.train()
-        return avg_test_loss

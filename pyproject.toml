@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bprMf"
+version = "0.1.0"
+description = "A Python package for Bayesian Personalized Ranking Matrix Factorization"
+readme = "README.md"
+requires-python = ">=3.9"
+
+
+
+
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "tqdm",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]

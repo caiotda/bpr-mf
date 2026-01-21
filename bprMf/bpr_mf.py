@@ -13,6 +13,7 @@ from bprMf.utils.tensor import create_id_to_idx_lookup_tensor
 
 from bprMf.evaluation import average_precision_at_k
 from tqdm import trange
+import gc
 
 
 class bprMFBase(nn.Module, abc.ABC):
@@ -316,4 +317,11 @@ class bprMFWithClickDebiasing(bprMFBase):
                 print(
                     f"Train epoch mean loss: {epoch_loss:>7f}; Epoch: {epoch+1}/{self.n_epochs}"
                 )
+        # Handles possible OOM after training
+        del optimizer
+        del users_factors
+        del positive_items_factors
+        del negative_items_factors
+        gc.collect()
+        torch.cuda.empty_cache()
         return train_epoch_losses

@@ -5,7 +5,7 @@ from torch import nn
 from bprMf.utils.tensor import create_id_to_idx_lookup_tensor
 
 
-class baseModel(nn.Module, abc.ABC):
+class BaseModel(nn.Module, abc.ABC):
     def __init__(self):
         super().__init__()
 

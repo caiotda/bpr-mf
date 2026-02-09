@@ -8,14 +8,14 @@ import pandas as pd
 
 from bprMf.utils.learner import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
 from bprMf.utils.data import create_bpr_dataloader
-from bprMf.model import baseModel
+from bprMf.model import BaseModel
 
 from bprMf.evaluation import average_precision_at_k
 from tqdm import trange
 import gc
 
 
-class bprMFBase(baseModel):
+class bprMFBase(BaseModel):
     def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs, dev, lr):
         super().__init__()
         self.device = dev

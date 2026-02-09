@@ -2,18 +2,7 @@ import abc
 import torch
 from torch import nn
 
-
-import numpy as np
-import pandas as pd
-
-from bprMf.utils.learner import bpr_loss_with_reg, bpr_loss_with_reg_with_debiased_click
-from bprMf.utils.data import create_bpr_dataloader
 from bprMf.utils.tensor import create_id_to_idx_lookup_tensor
-
-
-from bprMf.evaluation import average_precision_at_k
-from tqdm import trange
-import gc
 
 
 class baseModel(nn.Module, abc.ABC):

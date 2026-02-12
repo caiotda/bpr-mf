@@ -137,7 +137,7 @@ class bprMFBase(BaseModel):
         users_tensor = torch.tensor(users, dtype=torch.long, device=self.device)
         items_tensor = torch.tensor(items, dtype=torch.long, device=self.device)
         item_recs, item_scores = self.recommend(
-            users=users_tensor, candidates=items_tensor, k=k
+            users=users_tensor, candidates=items_tensor, k=k, mask=None
         )
 
         scored_df = pd.DataFrame(

@@ -50,26 +50,47 @@ class bprMFBase(BaseModel):
         mult = (user_emb * item_emb).sum(dim=1)
         return mult
 
-    def evaluate(self, test_df, k=20):
+    def evaluate(self, train_df, test_df, k=20):
         self.eval()
         map_scores = []
-        candidates = torch.tensor(test_df["item"].unique(), device=self.device)
+        train_pos = train_df[train_df.rating >= 4].groupby("user")["item"].apply(set)
+
+        test_pos = test_df[test_df.rating >= 4].groupby("user")["item"].apply(set)
+
+        all_items = torch.arange(self.n_items, device=self.device)
         with torch.no_grad():
-            for user_id, user_df in test_df.groupby("user"):
+            for user_id, relevant_items in test_pos.items():
+                if user_id not in train_pos:
+                    continue
 
-                user_id = torch.tensor([user_id], device=self.device)
-                hist = set(user_df.item.values)
-                scores = self.forward(user_id, candidates)
+                if len(relevant_items) == 0:
+                    continue
 
-                top_k_indices = torch.topk(scores, k=k).indices
-                top_k_items = candidates[top_k_indices].cpu().numpy()
+                user_tensor = torch.tensor([user_id], device=self.device)
+                scores = self.forward(user_tensor, all_items).flatten()
+
+                # remove training positives from ranking
+                train_items = train_pos[user_id]
+                if len(train_items) > 0:
+                    train_items_tensor = torch.tensor(
+                        list(train_items), device=self.device
+                    )
+                    scores[train_items_tensor] = -torch.inf
+
+                k_eff = min(k, scores.size(0))
+                top_k_items = torch.topk(scores, k=k_eff).indices.cpu().numpy()
+
                 ap = average_precision_at_k(
-                    ranked_items=top_k_items, relevant_items=list(hist), k=k
+                    ranked_items=top_k_items,
+                    relevant_items=relevant_items,
+                    k=k_eff,
                 )
+
                 map_scores.append(ap)
+
         self.train()
 
-        return np.mean(map_scores).item()
+        return float(np.mean(map_scores))
 
     def check_input_tensor_dimensions_for_prediction(self, user, candidates, mask):
         assert user.dim() == 1, "User tensor must be 1-dimensional"

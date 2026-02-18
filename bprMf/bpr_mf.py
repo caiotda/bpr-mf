@@ -224,7 +224,7 @@ class bprMFWithClickDebiasing(bprMFBase):
         super().__init__(num_users, num_items, factors, reg_lambda, n_epochs, dev, lr)
 
     def fit(self, train_df, debug=False):
-        train_data_loader = create_bpr_dataloader(train_df, should_debias=True)
+        train_data_loader = create_bpr_dataloader(train_df, should_debias=True,batch_size=self.batch_size, num_negatives=self.num_negatives)
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         train_epoch_losses = []
         self.train()

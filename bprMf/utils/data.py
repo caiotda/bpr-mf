@@ -54,54 +54,39 @@ def generate_bpr_triplets(
     interactions_dataset, num_negatives=3, use_click_debiasing=False
 ):
     """
-    Generates triplets of user, positive item, and negative item for Bayesian Personalized Ranking (BPR) training.
+    Generates (user, positive_item, negative_item) triplets for BPR training.
+    Negative items are sampled randomly from unobserved user-item pairs.
+
     Args:
-        interactions_dataset (pd.DataFrame): A pandas DataFrame containing user-item interaction data.
-            It must include the columns "user", "item", and "relevant". If `use_click_debiasing` is True,
-            it should also include the "click" column.
-        num_negatives (int, optional): The number of negative samples to generate for each positive interaction.
-            Defaults to 3.
-        use_click_debiasing (bool, optional): Whether to include the "click" column in the interactions dataset
-            for debiasing purposes. Defaults to False.
+        interactions_dataset: DataFrame of positive interactions with columns "user", "item",
+            and optionally "clicked_at" if use_click_debiasing is True.
+        num_negatives: Number of negative samples per positive interaction. Defaults to 3.
+        use_click_debiasing: Whether to include "clicked_at" in the triplets. Defaults to False.
+
     Returns:
-        torch.Tensor: A tensor of shape `(num_positive_interactions * num_negatives, len(interactions_cols))`
-            containing the generated triplets. Each row represents a triplet in the format
-            `[user, positive_item, negative_item]`.
-    Notes:
-        - The function ensures that the negative items sampled for each user are not part of their positive
-          interactions.
-        - The `interactions_dataset` should have integer-encoded "user" and "item" columns, where users and
-          items are indexed from 0 to `n_users - 1` and `n_items - 1`, respectively.
-        - The function uses PyTorch tensors for efficient computation on GPU if available.
+        Tensor of shape (num_interactions * num_negatives).
     """
     if use_click_debiasing:
-        interactions_cols = ["user", "item", "clicked_at", "relevant"]
+        interactions_cols = ["user", "item", "clicked_at"]
     else:
-        interactions_cols = ["user", "item", "relevant"]
+        interactions_cols = ["user", "item"]
 
     n_users = interactions_dataset.user.max() + 1
     n_items = interactions_dataset.item.max() + 1
 
-    positive_interactions = interactions_dataset.loc[
-        interactions_dataset["relevant"] == 1, interactions_cols
-    ].astype(int)
+    positive_interactions = interactions_dataset[interactions_cols].astype(int)
     positive_interactions_tensor = torch.tensor(
         positive_interactions.values, device=device
     )
 
-    pos_users = positive_interactions_tensor[:, 0].long()
+    users = positive_interactions_tensor[:, 0].long()
     pos_items = positive_interactions_tensor[:, 1].long()
 
-    # We flag each positive user x item pair
     pos_mask = torch.zeros(
         (n_users, n_items), dtype=torch.bool, device=positive_interactions_tensor.device
     )
-    pos_mask[pos_users, pos_items] = True
+    pos_mask[users, pos_items] = True
 
-    # Create a sample of size pos_items x num_negatives. With this,
-    # We can sample exactly num_negatives for each pos_item. Using
-    # pos_mask above, we assure that the sampled negatives are
-    # attributed exclusively to positive items.
     neg_samples = torch.randint(
         low=0,
         high=n_items,
@@ -111,13 +96,10 @@ def generate_bpr_triplets(
 
     # Ideally, this should be empty: all of the sampled negatives
     # are not present in pos_mask.
-    bad = pos_mask[pos_users.unsqueeze(1), neg_samples]
+    bad = pos_mask[users.unsqueeze(1), neg_samples]
 
     # Finally, we re-sample until the bad tensor is empty.
-    while True:
-        if not bad.any():
-            break
-
+    while bad.any():
         # re-draw only the bad negatives
         num_bad = bad.sum()
         neg_samples[bad] = torch.randint(
@@ -128,11 +110,10 @@ def generate_bpr_triplets(
         )
 
         # recompute mask
-        bad = pos_mask[pos_users.unsqueeze(1), neg_samples]
+        bad = pos_mask[users.unsqueeze(1), neg_samples]
 
     neg_items = neg_samples.reshape(len(pos_items) * num_negatives, 1)
 
-    # Remove only the last tuple.
     cut_off = len(interactions_cols) - 1
     indices = positive_interactions_tensor[:, 0:cut_off]
     repeated_positives = indices.repeat_interleave(num_negatives, dim=0)

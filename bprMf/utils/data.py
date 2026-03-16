@@ -115,8 +115,9 @@ def generate_bpr_triplets(
     neg_items = neg_samples.reshape(len(pos_items) * num_negatives, 1)
 
     cut_off = len(interactions_cols) - 1
-    indices = positive_interactions_tensor[:, 0:cut_off]
-    repeated_positives = indices.repeat_interleave(num_negatives, dim=0)
+    repeated_positives = positive_interactions_tensor.repeat_interleave(
+        num_negatives, dim=0
+    )
     triplets = torch.concat([repeated_positives, neg_items], dim=1)
 
     return triplets

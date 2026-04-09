@@ -51,9 +51,9 @@ class BaseModel(nn.Module, abc.ABC):
                 all_items.append(items_batch)
                 all_scores.append(scores_batch)
 
-            users_all = torch.cat(all_users, dim=0).cpu().unsqueeze(1).long()
-            items_all = torch.cat(all_items, dim=0).cpu().unsqueeze(1).long()
-            scores_all = torch.cat(all_scores, dim=0).cpu().unsqueeze(1)
+            users_all = torch.cat(all_users, dim=0).cpu().long()
+            items_all = torch.cat(all_items, dim=0).cpu().long()
+            scores_all = torch.cat(all_scores, dim=0).cpu()
 
             del all_users
             del all_items

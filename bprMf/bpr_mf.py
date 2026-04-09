@@ -174,7 +174,8 @@ class bprMf(bprMFBase):
                 user_ids = user_ids.to(self.device)
                 positive_items_ids = positive_items_ids.to(self.device)
                 negative_items_ids = negative_items_ids.to(self.device)
-
+                
+                optimizer.zero_grad()
                 pred_positive = self.forward(user_ids, positive_items_ids)
                 pred_negative = self.forward(user_ids, negative_items_ids)
 
@@ -195,7 +196,7 @@ class bprMf(bprMFBase):
 
                 loss.backward()
                 optimizer.step()
-                optimizer.zero_grad()
+                
             epoch_loss = float(np.mean(batch_losses)) if batch_losses else 0.0
             train_epoch_losses.append(epoch_loss)
             if debug:
@@ -241,7 +242,7 @@ class bprMFWithClickDebiasing(bprMFBase):
                 positive_items_ids = positive_items_ids.to(self.device)
                 negative_items_ids = negative_items_ids.to(self.device)
                 clicked_positions = clicked_positions.to(self.device)
-
+                optimizer.zero_grad()
                 pred_positive = self.forward(user_ids, positive_items_ids)
                 pred_negative = self.forward(user_ids, negative_items_ids)
 
@@ -263,7 +264,6 @@ class bprMFWithClickDebiasing(bprMFBase):
 
                 loss.backward()
                 optimizer.step()
-                optimizer.zero_grad()
             epoch_loss = float(np.mean(batch_losses)) if batch_losses else 0.0
             train_epoch_losses.append(epoch_loss)
             if debug:

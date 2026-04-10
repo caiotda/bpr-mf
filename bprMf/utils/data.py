@@ -1,4 +1,5 @@
 import torch
+import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 
 
@@ -121,3 +122,26 @@ def generate_bpr_triplets(
     triplets = torch.concat([repeated_positives, neg_items], dim=1)
 
     return triplets
+
+
+def temporal_train_val_test_split(df, user_col="user", temporal_col="timestamp", val_pct=0.1, test_pct=0.1):
+    train_parts = []
+    val_parts = []
+    test_parts = []
+
+    for _, group in df.groupby(user_col):
+        group = group.sort_values(temporal_col)
+        n = len(group)
+        
+        n_test = max(1, int(n * test_pct))
+        n_val = max(1, int(n * val_pct))
+
+        if n <= n_val + n_test:
+            train_parts.append(group)
+            continue
+
+        test_parts.append(group.iloc[-n_test:])
+        val_parts.append(group.iloc[-(n_test + n_val):-n_test])
+        train_parts.append(group.iloc[:-(n_test + n_val)])
+
+    return pd.concat(train_parts), pd.concat(val_parts), pd.concat(test_parts)

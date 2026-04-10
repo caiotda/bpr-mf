@@ -65,45 +65,46 @@ class bprMFBase(BaseModel):
 
     def evaluate(self, train_df, test_df, k=20):
         self.eval()
-        map_scores = []
-        train_pos = train_df[train_df.rating >= 4].groupby("user")["item"].apply(set)
 
-        test_pos = test_df[test_df.rating >= 4].groupby("user")["item"].apply(set)
+        train_pos = train_df.groupby("user")["item"].apply(set)
+        test_pos = test_df.groupby("user")["item"].apply(set)
+        # Make sure to use users present in both, specially important in CVTT
+        # scenario
+        eval_users = sorted(set(test_pos.index) & set(train_pos.index))
 
         all_items = torch.arange(self.n_items, device=self.device)
+
         with torch.no_grad():
-            for user_id, relevant_items in test_pos.items():
-                if user_id not in train_pos:
-                    continue
+            # We avoid using model.forward() here as it does an item per item batch
+            # scoring for learning.
+            # Here we want to score everyone, so we do a full matrix
+            # multiplication.
+            user_tensors = torch.tensor(eval_users, device=self.device)
+            user_emb = self.user_emb(user_tensors)        # (n_eval_users, factors)
+            item_emb = self.item_emb(all_items)            # (n_items, factors)
+            score_matrix = user_emb @ item_emb.T           # (n_eval_users, n_items)
 
-                if len(relevant_items) == 0:
-                    continue
+            # remove predictions for items exclusively in train dataset.
+            for i, user_id in enumerate(eval_users):
+                train_items = torch.tensor(list(train_pos[user_id]), device=self.device)
+                score_matrix[i, train_items] = -torch.inf
 
-                user_tensor = torch.tensor([user_id], device=self.device)
-                scores = self.forward(user_tensor, all_items).flatten()
+            top_k = torch.topk(score_matrix, k=k, dim=1).indices.cpu().numpy()
 
-                # remove training positives from ranking
-                train_items = train_pos[user_id]
-                if len(train_items) > 0:
-                    train_items_tensor = torch.tensor(
-                        list(train_items), device=self.device
-                    )
-                    scores[train_items_tensor] = -torch.inf
-
-                k_eff = min(k, scores.size(0))
-                top_k_items = torch.topk(scores, k=k_eff).indices.cpu().numpy()
-
-                ap = average_precision_at_k(
-                    ranked_items=top_k_items,
-                    relevant_items=relevant_items,
-                    k=k_eff,
-                )
-
-                map_scores.append(ap)
+        map_scores = []
+        for user_idx, user_id in enumerate(eval_users):
+            relevant_items = test_pos[user_id]
+            if len(relevant_items) == 0:
+                continue
+            ap = average_precision_at_k(
+                ranked_items=top_k[user_idx],
+                relevant_items=relevant_items,
+                k=k,
+            )
+            map_scores.append(ap)
 
         self.train()
-
-        return float(np.mean(map_scores))
+        return float(np.mean(map_scores)) if map_scores else 0.0
 
     def check_input_tensor_dimensions_for_prediction(self, user, candidates, mask):
         assert user.dim() == 1, "User tensor must be 1-dimensional"

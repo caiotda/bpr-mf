@@ -154,8 +154,8 @@ class bprMFBase(BaseModel):
 
 
 class bprMf(bprMFBase):
-    def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs, dev, lr):
-        super().__init__(num_users, num_items, factors, reg_lambda, n_epochs, dev, lr)
+    def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs, dev, lr, num_negatives=5):
+        super().__init__(num_users, num_items, factors, reg_lambda, n_epochs, dev, lr, num_negatives)
 
     def fit(self, train_df, debug=False):
         train_data_loader = create_bpr_dataloader(
@@ -222,8 +222,8 @@ class bprMf(bprMFBase):
 
 
 class bprMFWithClickDebiasing(bprMFBase):
-    def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs, dev, lr):
-        super().__init__(num_users, num_items, factors, reg_lambda, n_epochs, dev, lr)
+    def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs, dev, lr, num_negatives=5):
+        super().__init__(num_users, num_items, factors, reg_lambda, n_epochs, dev, lr, num_negatives)
 
     def fit(self, train_df, debug=False):
         train_data_loader = create_bpr_dataloader(train_df, should_debias=True,batch_size=self.batch_size, num_negatives=self.num_negatives)

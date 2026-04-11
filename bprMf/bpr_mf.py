@@ -230,7 +230,7 @@ class bprMFWithClickDebiasing(bprMFBase):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         train_epoch_losses = []
         self.train()
-        for epoch in range(self.n_epochs):
+        for epoch in trange(self.n_epochs, desc="Epochs"):
             batch_losses = []
             for _, (
                 user_ids,

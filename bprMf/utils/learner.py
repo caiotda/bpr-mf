@@ -6,7 +6,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def get_click_propensity(clicks_positions):
     # Function that penalizes clicks on top ranked positions. This
     # serves as a debiasing approach for our model.
-    return torch.log2(1 + clicks_positions)
+    return 1.0 / torch.log2(1 + clicks_positions)
 
 def bpr_loss_with_reg_with_debiased_click(
             positive_item_scores,
@@ -17,6 +17,7 @@ def bpr_loss_with_reg_with_debiased_click(
             negative_item_factor,
             reg_lambda=1e-4):
     w_u_i = get_click_propensity(positive_items_positions)
+    
     loss = - w_u_i * torch.log(torch.sigmoid(positive_item_scores - negative_item_scores) + 1e-8)
     loss = loss.mean()
     # Applies l2 regularization as per BPR-OPT.

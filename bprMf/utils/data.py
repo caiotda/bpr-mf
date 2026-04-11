@@ -23,8 +23,9 @@ class bprMFLClickDebiasingDataloader(Dataset):
     def __init__(self, bpr_tensor):
         self.users = bpr_tensor[:, 0]
         self.pos_items = bpr_tensor[:, 1]
-        self.neg_items = bpr_tensor[:, 2]
-        self.click_position = bpr_tensor[:, 3]
+        self.click_position = bpr_tensor[:, 2]
+        self.neg_items = bpr_tensor[:, 3]
+
 
     def __len__(self):
         return len(self.users)
@@ -68,6 +69,8 @@ def generate_bpr_triplets(
         Tensor of shape (num_interactions * num_negatives).
     """
     if use_click_debiasing:
+        # We do 1 based indexing in order to avoid division by zero when computing debiasing
+        interactions_dataset["clicked_at"] = interactions_dataset["clicked_at"] + 1
         interactions_cols = ["user", "item", "clicked_at"]
     else:
         interactions_cols = ["user", "item"]

@@ -10,7 +10,7 @@ from bprMf.utils.learner import bpr_loss_with_reg, bpr_loss_with_reg_with_debias
 from bprMf.utils.data import create_bpr_dataloader
 from bprMf.model import BaseModel
 
-from bprMf.evaluation import average_precision_at_k
+from bprMf.evaluation import average_precision_at_k, compute_map_at_k
 from tqdm import trange
 import gc
 
@@ -91,20 +91,10 @@ class bprMFBase(BaseModel):
 
             top_k = torch.topk(score_matrix, k=k, dim=1).indices.cpu().numpy()
 
-        map_scores = []
-        for user_idx, user_id in enumerate(eval_users):
-            relevant_items = test_pos[user_id]
-            if len(relevant_items) == 0:
-                continue
-            ap = average_precision_at_k(
-                ranked_items=top_k[user_idx],
-                relevant_items=relevant_items,
-                k=k,
-            )
-            map_scores.append(ap)
+        map_k = compute_map_at_k(top_k, eval_users, test_pos, k)
 
         self.train()
-        return float(np.mean(map_scores)) if map_scores else 0.0
+        return map_k
 
     def check_input_tensor_dimensions_for_prediction(self, user, candidates, mask):
         assert user.dim() == 1, "User tensor must be 1-dimensional"

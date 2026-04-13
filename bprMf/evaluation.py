@@ -15,3 +15,18 @@ def average_precision_at_k(ranked_items, relevant_items, k):
         return 0.0
 
     return score / min(len(relevant_items), k)
+
+
+def compute_map_at_k(top_k, eval_users, test_pos, k):
+    map_scores = []
+    for user_idx, user_id in enumerate(eval_users):
+        relevant_items = test_pos[user_id]
+        if len(relevant_items) == 0:
+            continue
+        ap = average_precision_at_k(
+            ranked_items=top_k[user_idx],
+            relevant_items=relevant_items,
+            k=k,
+        )
+        map_scores.append(ap)
+    return float(np.mean(map_scores)) if map_scores else 0.0

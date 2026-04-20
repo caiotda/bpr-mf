@@ -26,7 +26,6 @@ class bprMFLClickDebiasingDataloader(Dataset):
         self.click_position = bpr_tensor[:, 2]
         self.neg_items = bpr_tensor[:, 3]
 
-
     def __len__(self):
         return len(self.users)
 
@@ -68,17 +67,20 @@ def generate_bpr_triplets(
     Returns:
         Tensor of shape (num_interactions * num_negatives).
     """
+    # We copy the interactions_dataset in order to avoind second order effects - specially
+    # when fixing the clicked_At index
+    df = interactions_dataset.copy()
     if use_click_debiasing:
         # We do 1 based indexing in order to avoid division by zero when computing debiasing
-        interactions_dataset["clicked_at"] = interactions_dataset["clicked_at"] + 1
+        df["clicked_at"] = df["clicked_at"] + 1
         interactions_cols = ["user", "item", "clicked_at"]
     else:
         interactions_cols = ["user", "item"]
 
-    n_users = interactions_dataset.user.max() + 1
-    n_items = interactions_dataset.item.max() + 1
+    n_users = df.user.max() + 1
+    n_items = df.item.max() + 1
 
-    positive_interactions = interactions_dataset[interactions_cols].astype(int)
+    positive_interactions = df[interactions_cols].astype(int)
     positive_interactions_tensor = torch.tensor(
         positive_interactions.values, device=device
     )
@@ -127,7 +129,9 @@ def generate_bpr_triplets(
     return triplets
 
 
-def temporal_train_val_test_split(df, user_col="user", temporal_col="timestamp", val_pct=0.1, test_pct=0.1):
+def temporal_train_val_test_split(
+    df, user_col="user", temporal_col="timestamp", val_pct=0.1, test_pct=0.1
+):
     train_parts = []
     val_parts = []
     test_parts = []
@@ -135,7 +139,7 @@ def temporal_train_val_test_split(df, user_col="user", temporal_col="timestamp",
     for _, group in df.groupby(user_col):
         group = group.sort_values(temporal_col)
         n = len(group)
-        
+
         n_test = max(1, int(n * test_pct))
         n_val = max(1, int(n * val_pct))
 
@@ -144,7 +148,7 @@ def temporal_train_val_test_split(df, user_col="user", temporal_col="timestamp",
             continue
 
         test_parts.append(group.iloc[-n_test:])
-        val_parts.append(group.iloc[-(n_test + n_val):-n_test])
-        train_parts.append(group.iloc[:-(n_test + n_val)])
+        val_parts.append(group.iloc[-(n_test + n_val) : -n_test])
+        train_parts.append(group.iloc[: -(n_test + n_val)])
 
     return pd.concat(train_parts), pd.concat(val_parts), pd.concat(test_parts)

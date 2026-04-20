@@ -1,4 +1,3 @@
-import pandas as pd
 import numpy as np
 
 
@@ -30,3 +29,10 @@ def compute_map_at_k(top_k, eval_users, test_pos, k):
         )
         map_scores.append(ap)
     return float(np.mean(map_scores)) if map_scores else 0.0
+
+def calculate_mrr(df):
+    # We get the higher ranked relevant item for each user in each round.
+    mrr_df = df.groupby("user").agg({"clicked_at": min}).reset_index()
+    mrr_df["reciprocal_rank"] = 1 / (mrr_df["clicked_at"] + 1)
+    mrr = mrr_df["reciprocal_rank"].mean()
+    return mrr

@@ -10,7 +10,7 @@ from bprMf.utils.learner import bpr_loss_with_reg, bpr_loss_with_reg_with_debias
 from bprMf.utils.data import create_bpr_dataloader
 from bprMf.model import BaseModel
 
-from bprMf.evaluation import average_precision_at_k, compute_map_at_k
+from bprMf.evaluation import _compute_map_at_k
 from tqdm import trange
 import gc
 
@@ -80,18 +80,17 @@ class bprMFBase(BaseModel):
             # Here we want to score everyone, so we do a full matrix
             # multiplication.
             user_tensors = torch.tensor(eval_users, device=self.device)
-            user_emb = self.user_emb(user_tensors)        # (n_eval_users, factors)
-            item_emb = self.item_emb(all_items)            # (n_items, factors)
-            score_matrix = user_emb @ item_emb.T           # (n_eval_users, n_items)
+            user_emb = self.user_emb(user_tensors)  # (n_eval_users, factors)
+            item_emb = self.item_emb(all_items)  # (n_items, factors)
+            score_matrix = user_emb @ item_emb.T  # (n_eval_users, n_items)
 
             # remove predictions for items exclusively in train dataset.
             for i, user_id in enumerate(eval_users):
                 train_items = torch.tensor(list(train_pos[user_id]), device=self.device)
                 score_matrix[i, train_items] = -torch.inf
-
             top_k = torch.topk(score_matrix, k=k, dim=1).indices.cpu().numpy()
 
-        map_k = compute_map_at_k(top_k, eval_users, test_pos, k)
+        map_k = _compute_map_at_k(top_k, eval_users, test_pos, k)
 
         self.train()
         return map_k
@@ -144,8 +143,20 @@ class bprMFBase(BaseModel):
 
 
 class bprMf(bprMFBase):
-    def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs, dev, lr, num_negatives=5):
-        super().__init__(num_users, num_items, factors, reg_lambda, n_epochs, dev, lr, num_negatives)
+    def __init__(
+        self,
+        num_users,
+        num_items,
+        factors,
+        reg_lambda,
+        n_epochs,
+        dev,
+        lr,
+        num_negatives=5,
+    ):
+        super().__init__(
+            num_users, num_items, factors, reg_lambda, n_epochs, dev, lr, num_negatives
+        )
 
     def fit(self, train_df, debug=False):
         train_data_loader = create_bpr_dataloader(
@@ -165,7 +176,7 @@ class bprMf(bprMFBase):
                 user_ids = user_ids.to(self.device)
                 positive_items_ids = positive_items_ids.to(self.device)
                 negative_items_ids = negative_items_ids.to(self.device)
-                
+
                 optimizer.zero_grad()
                 pred_positive = self.forward(user_ids, positive_items_ids)
                 pred_negative = self.forward(user_ids, negative_items_ids)
@@ -187,7 +198,7 @@ class bprMf(bprMFBase):
 
                 loss.backward()
                 optimizer.step()
-                
+
             epoch_loss = float(np.mean(batch_losses)) if batch_losses else 0.0
             train_epoch_losses.append(epoch_loss)
             if debug:
@@ -212,11 +223,28 @@ class bprMf(bprMFBase):
 
 
 class bprMFWithClickDebiasing(bprMFBase):
-    def __init__(self, num_users, num_items, factors, reg_lambda, n_epochs, dev, lr, num_negatives=5):
-        super().__init__(num_users, num_items, factors, reg_lambda, n_epochs, dev, lr, num_negatives)
+    def __init__(
+        self,
+        num_users,
+        num_items,
+        factors,
+        reg_lambda,
+        n_epochs,
+        dev,
+        lr,
+        num_negatives=5,
+    ):
+        super().__init__(
+            num_users, num_items, factors, reg_lambda, n_epochs, dev, lr, num_negatives
+        )
 
     def fit(self, train_df, debug=False):
-        train_data_loader = create_bpr_dataloader(train_df, should_debias=True,batch_size=self.batch_size, num_negatives=self.num_negatives)
+        train_data_loader = create_bpr_dataloader(
+            train_df,
+            should_debias=True,
+            batch_size=self.batch_size,
+            num_negatives=self.num_negatives,
+        )
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         train_epoch_losses = []
         self.train()

@@ -63,15 +63,20 @@ class bprMFBase(BaseModel):
         mult = (user_emb * item_emb).sum(dim=1)
         return mult
 
-    def evaluate(self, train_df, test_df, k=20):
+    def evaluate(self, train_df, oot_df, oracle_df_pos, k=20):
         self.eval()
 
         train_pos = train_df.groupby("user")["item"].apply(set)
-        test_pos = test_df.groupby("user")["item"].apply(set)
+
+        # Positive items
+        oracle_pos = oracle_df_pos.groupby("user")["item"].apply(set)
         # Make sure to use users present in both, specially important in CVTT
         # scenario
-        eval_users = sorted(set(test_pos.index) & set(train_pos.index))
-
+        oot_users = set(oot_df["user"].unique())
+        # We only eval users that were both in the train and oot datasets, and that we have a
+        # relevancy judgement (oracle_pos)
+        eval_users = sorted(oot_users & set(oracle_pos.index) & set(train_pos.index))
+        test_pos = oracle_pos
         all_items = torch.arange(self.n_items, device=self.device)
 
         with torch.no_grad():
